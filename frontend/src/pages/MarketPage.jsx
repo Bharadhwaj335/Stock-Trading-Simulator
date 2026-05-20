@@ -13,9 +13,11 @@ export default function MarketPage() {
   const [sort,    setSort]    = useState('marketCap');
   const [livePrices, setLivePrices] = useState({});
 
-  const { data: stocks = [], isLoading } = useQuery('stocks', () =>
+  const { data: stockData, isLoading } = useQuery('stocks', () =>
     stockService.getAll().then(r => r.data.data)
   );
+
+  const stocks = Array.isArray(stockData) ? stockData : (stockData?.stocks || []);
 
   useMarketTickerSocket(tick => {
     setLivePrices(prev => ({

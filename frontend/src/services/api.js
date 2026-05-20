@@ -92,7 +92,7 @@ export const tradeService = {
 };
 
 export const portfolioService = {
-  get: () => api.get('/portfolio'),
+  get: () => api.get('/portfolio').then(r => r.data.data),
 };
 
 export const analyticsService = {

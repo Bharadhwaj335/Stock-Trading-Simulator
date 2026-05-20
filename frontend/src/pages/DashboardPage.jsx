@@ -22,8 +22,9 @@ export default function DashboardPage() {
   const user = useAuthStore(s => s.user);
   const [livePrices, setLivePrices] = useState({});
 
-  const { data: portfolio } = useQuery('portfolio', () => portfolioService.get().then(r => r.data));
-  const { data: stocks }    = useQuery('stocks', () => stockService.getAll().then(r => r.data.data));
+  const { data: portfolio } = useQuery('portfolio', () => portfolioService.get());
+  const { data: stocksData } = useQuery('stocks', () => stockService.getAll().then(r => r.data.data));
+  const stocks = Array.isArray(stocksData) ? stocksData : (stocksData?.stocks || []);
 
   useMarketTickerSocket(tick => {
     setLivePrices(prev => ({ ...prev, [tick.symbol]: tick.currentPrice }));
@@ -102,6 +103,7 @@ export default function DashboardPage() {
             {topMovers.map((s) => {
               const price = livePrices[s.symbol] || s.currentPrice;
               const up    = s.changePercent >= 0;
+              const displayName = (s.name || s.symbol || 'Unknown').slice(0, 22);
               return (
                 <Link to={`/market/${s.symbol}`} key={s.symbol}
                   className="flex items-center justify-between py-2 hover:bg-slate-800 px-2 rounded-lg -mx-2 transition">
@@ -111,7 +113,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="font-medium text-white">{s.symbol}</div>
-                      <div className="text-slate-400 text-xs">{s.name.substring(0, 22)}</div>
+                      <div className="text-slate-400 text-xs">{displayName}</div>
                     </div>
                   </div>
                   <div className="text-right">

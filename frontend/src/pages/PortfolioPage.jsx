@@ -38,7 +38,7 @@ export default function PortfolioPage() {
     data: portfolio, 
     isLoading: portfolioLoading, 
     refetch: refetchPortfolio 
-  } = useQuery('portfolio', () => portfolioService.get().then(r => r.data), {
+  } = useQuery('portfolio', () => portfolioService.get(), {
     refetchOnWindowFocus: false,
   });
 
@@ -62,15 +62,18 @@ export default function PortfolioPage() {
 
   const summary = portfolio?.summary;
   const holdings = portfolio?.holdings || [];
-  const trades = tradesData || [];
+  const trades = Array.isArray(tradesData)
+    ? tradesData
+    : (tradesData?.trades || []);
 
   // Calculate live values
   let livePortfolioValue = 0;
   let totalCost = 0;
 
   const enrichedHoldings = holdings.map(h => {
-    const currentPrice = livePrices[h.symbol] || h.currentPrice || h.avgBuyPrice;
-    const currentValue = currentPrice * h.quantity;
+    const currentPrice = livePrices[h.symbol] || h.currentPrice || h.avgBuyPrice || 0;
+    const qty = h.qty || h.quantity || 0;
+    const currentValue = currentPrice * qty;
     const pnl = currentValue - h.totalInvested;
     const pnlPercent = h.totalInvested > 0 ? (pnl / h.totalInvested) * 100 : 0;
     
@@ -79,6 +82,8 @@ export default function PortfolioPage() {
 
     return {
       ...h,
+      qty,
+      quantity: qty,
       currentPrice,
       currentValue,
       pnl,
@@ -283,21 +288,27 @@ export default function PortfolioPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-800 text-sm text-slate-300">
                     {trades.map((t) => {
-                      const isBuy = t.type === 'BUY';
+                      const typeUpper = String(t.type || 'BUY').toUpperCase();
+                      const isBuy = typeUpper === 'BUY';
                       const hasPnL = t.pnl !== undefined && t.pnl !== null;
                       const isPnLPos = (t.pnl || 0) >= 0;
+
+                      const dateVal = t.executedAt || t.createdAt;
+                      const qtyVal = t.quantity || t.qty || 0;
+                      const priceVal = t.price || t.priceAtTrade || 0;
+                      const totalVal = t.total || t.totalValue || 0;
 
                       return (
                         <tr key={t._id} className="hover:bg-slate-800/40 transition">
                           <td className="py-4 px-6 text-xs text-slate-400 font-medium">
-                            {new Date(t.executedAt).toLocaleString()}
+                            {dateVal ? new Date(dateVal).toLocaleString() : '—'}
                           </td>
                           <td className="py-4 px-6">
                             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
                               isBuy ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                             }`}>
                               {isBuy ? <ArrowDownLeft size={12} /> : <ArrowUpRight size={12} />}
-                              {t.type}
+                              {typeUpper}
                             </span>
                           </td>
                           <td className="py-4 px-6 font-semibold text-white">
@@ -305,12 +316,12 @@ export default function PortfolioPage() {
                               {t.symbol}
                             </Link>
                           </td>
-                          <td className="py-4 px-6 text-right font-medium">{t.quantity}</td>
+                          <td className="py-4 px-6 text-right font-medium">{qtyVal}</td>
                           <td className="py-4 px-6 text-right font-medium">
-                            ${t.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="py-4 px-6 text-right font-medium">
-                            ${t.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className={`py-4 px-6 text-right font-bold ${
                             !isBuy && hasPnL ? (isPnLPos ? 'text-emerald-400' : 'text-red-400') : 'text-slate-500'

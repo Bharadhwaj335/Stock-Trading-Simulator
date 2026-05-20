@@ -12,6 +12,7 @@ const { connectDB } = require('./config/db');
 const { connectRedis } = require('./config/redis');
 const { initSocketServer } = require('./socket');
 const { startCronJobs } = require('./jobs');
+const { startPricePoller } = require('./jobs/pricePoller');
 const { errorHandler } = require('./middleware/errorHandler');
 const { logger } = require('./utils/logger');
 
@@ -93,5 +94,6 @@ const PORT = process.env.PORT || 5000;
   await connectDB();
   await connectRedis();
   startCronJobs();
+  startPricePoller();
   httpServer.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
 })();

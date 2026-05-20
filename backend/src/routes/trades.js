@@ -1,13 +1,17 @@
-const { Router } = require('express');
-const { protect } = require('../middleware/auth');
-const { buyStock, sellStock, getTradeHistory } = require('../controllers/tradeController');
-const rateLimit = require('express-rate-limit');
+const express = require('express');
+const router  = express.Router();
+const { createTrade, getTrades } = require('../controllers/trades.controller');
+const { verifyJWT } = require('../middleware/auth.middleware');
 
-const tradeLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: 'Too many trades' });
-const router = Router();
+router.use(verifyJWT);
 
-router.post('/buy', protect, tradeLimiter, buyStock);
-router.post('/sell', protect, tradeLimiter, sellStock);
-router.get('/history', protect, getTradeHistory);
+// New unified endpoints
+router.post('/', createTrade);   // POST /api/trades
+router.get('/',  getTrades);     // GET  /api/trades
+
+// Legacy compatibility endpoints
+router.post('/buy', createTrade);   // POST /api/trades/buy
+router.post('/sell', createTrade);  // POST /api/trades/sell
+router.get('/history', getTrades);  // GET  /api/trades/history
 
 module.exports = router;

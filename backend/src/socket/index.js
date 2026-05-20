@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
 
+const { startPriceEmitter } = require('./priceEmitter');
+
 const initSocketServer = (io) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -33,6 +35,9 @@ const initSocketServer = (io) => {
       logger.info(`Socket disconnected: ${socket.id}`);
     });
   });
+
+  // Start the background price broadcaster
+  startPriceEmitter(io);
 };
 
 const broadcastPriceUpdate = (io, symbol, data) => {

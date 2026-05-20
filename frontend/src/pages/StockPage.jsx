@@ -24,9 +24,11 @@ export default function StockPage() {
   const [alertCond,    setAlertCond]   = useState('ABOVE');
 
   const { data: stock }   = useQuery(['stock', symbol], () => stockService.getOne(symbol).then(r => r.data.data));
-  const { data: history } = useQuery(['history', symbol, range], () =>
+  const { data: historyData } = useQuery(['history', symbol, range], () =>
     stockService.getHistory(symbol, range).then(r => r.data.data)
   );
+
+  const history = Array.isArray(historyData) ? historyData : (historyData?.bars || []);
 
   useStockPriceSocket(symbol, data => {
     setLivePrice(data.currentPrice);
@@ -52,6 +54,7 @@ export default function StockPage() {
             : `Sold ${qty} shares. P&L: ${pnl >= 0 ? '+' : ''}$${pnl?.toFixed(2)}`
         );
         qc.invalidateQueries('portfolio');
+        qc.invalidateQueries('tradeHistory');
       },
       onError: (err) => {
         const msg = err.response?.data?.message || 'Trade failed';

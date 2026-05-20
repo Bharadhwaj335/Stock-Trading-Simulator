@@ -1,75 +1,54 @@
 const Portfolio = require('../models/Portfolio');
+const Wallet = require('../models/Wallet');
 const PriceCache = require('../models/PriceCache');
 const { success } = require('../utils/ApiResponse');
-
-exports.getPortfolio = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const p = await Portfolio.findOne({ userId });
-    const holdings = p?.holdings || [];
-    // enrich with live price
-    const enriched = await Promise.all(holdings.map(async (h) => {
-      const pc = await PriceCache.findOne({ symbol: h.symbol });
-      const price = pc ? pc.price : null;
-      const currentValue = price ? price * h.qty : h.totalInvested;
-      const pnl = Number((currentValue - h.totalInvested).toFixed(2));
-      const pnlPercent = h.totalInvested ? Number(((currentValue - h.totalInvested) / h.totalInvested * 100).toFixed(2)) : 0;
-      return { ...h._doc, currentPrice: price, currentValue, pnl, pnlPercent };
-    }));
-
-    const summary = {
-      walletBalance: 0,
-      portfolioValue: enriched.reduce((s, x) => s + x.currentValue, 0),
-      netWorth: enriched.reduce((s, x) => s + x.currentValue, 0),
-      totalPnL: enriched.reduce((s, x) => s + x.pnl, 0),
-      totalPnLPercent: 0,
-    };
-
-    return success(res, { holdings: enriched, summary });
-  } catch (err) { next(err); }
-};
-const Holding = require('../models/Holding');
-const User = require('../models/User');
-const Stock = require('../models/Stock');
 
 const getPortfolio = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const holdings = await Holding.find({ user: userId }).lean();
+    const portfolio = await Portfolio.findOne({ userId }).lean();
+    const wallet = await Wallet.findOne({ userId }).lean();
+    const holdings = portfolio?.holdings || [];
 
-    const symbols = holdings.map(h => h.symbol);
-    const stocks = await Stock.find({ symbol: { $in: symbols } }).lean();
-    const priceMap = Object.fromEntries(stocks.map(s => [s.symbol, s.currentPrice]));
+    const enriched = await Promise.all(holdings.map(async (h) => {
+      const pc = await PriceCache.findOne({ symbol: h.symbol }).lean();
+      const currentPrice = pc?.price ?? h.avgBuyPrice ?? 0;
+      const quantity = h.qty ?? h.quantity ?? 0;
+      const totalInvested = h.totalInvested ?? (h.avgBuyPrice || 0) * quantity;
+      const currentValue = currentPrice * quantity;
+      const pnl = Number((currentValue - totalInvested).toFixed(2));
+      const pnlPercent = totalInvested ? Number(((pnl / totalInvested) * 100).toFixed(2)) : 0;
 
-    let totalValue = 0;
-    let totalCost = 0;
-    const enriched = holdings.map(h => {
-      const price = priceMap[h.symbol] || h.avgBuyPrice;
-      const current = price * h.quantity;
-      const pnl = current - h.totalInvested;
-      totalValue += current;
-      totalCost += h.totalInvested;
-      return { ...h, currentPrice: price, currentValue: current, pnl, pnlPercent: (pnl / h.totalInvested) * 100 };
-    });
+      return {
+        ...h,
+        qty: quantity,
+        quantity,
+        currentPrice,
+        currentValue,
+        pnl,
+        pnlPercent,
+      };
+    }));
 
-    const user = await User.findById(userId).select('walletBalance').lean();
-    const totalPnL = totalValue - totalCost;
-    const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
-    const netWorth = (user?.walletBalance || 0) + totalValue;
+    const portfolioValue = enriched.reduce((sum, item) => sum + item.currentValue, 0);
+    const totalPnL = enriched.reduce((sum, item) => sum + item.pnl, 0);
+    const walletBalance = wallet?.balance || 0;
+    const netWorth = walletBalance + portfolioValue;
+    const totalCost = enriched.reduce((sum, item) => sum + (item.totalInvested || 0), 0);
 
-    res.json({
+    return success(res, {
       holdings: enriched,
       summary: {
-        walletBalance: user?.walletBalance || 0,
-        portfolioValue: totalValue,
+        walletBalance,
+        portfolioValue,
         netWorth,
         totalPnL,
-        totalPnLPercent: totalPnLPct,
+        totalPnLPercent: totalCost > 0 ? Number(((totalPnL / totalCost) * 100).toFixed(2)) : 0,
       },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
-module.exports = {
-  getPortfolio,
-};
+module.exports = { getPortfolio };
