@@ -29,9 +29,23 @@ const analyticsRoutes = require('./routes/analytics');
 const app = express();
 const httpServer = http.createServer(app);
 
+const defaultClientOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+];
+
+const envClientOrigins = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultClientOrigins, ...envClientOrigins])];
+
 // ── Socket.io ──
 const io = new Server(httpServer, {
-  cors: { origin: process.env.CLIENT_URL, credentials: true },
+  cors: { origin: allowedOrigins, credentials: true },
 });
 module.exports.io = io;
 
@@ -42,8 +56,6 @@ app.use(helmet());
 app.use(compression());
 
 // configure CORS to accept configured client origins (supports comma-separated list)
-const rawClient = process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:5174';
-const allowedOrigins = rawClient.split(',').map(s => s.trim()).filter(Boolean);
 logger.info(`Allowed CORS origins: ${allowedOrigins.join(',')}`);
 // Use a simple whitelist array for CORS so the module sets headers correctly
 app.use(cors({ origin: allowedOrigins, credentials: true }));

@@ -3,7 +3,11 @@ const { logger } = require('../utils/logger');
 
 const { startPriceEmitter } = require('./priceEmitter');
 
+let socketIo = null;
+
 const initSocketServer = (io) => {
+  socketIo = io;
+
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (token) {
@@ -40,9 +44,13 @@ const initSocketServer = (io) => {
   startPriceEmitter(io);
 };
 
-const broadcastPriceUpdate = (io, symbol, data) => {
-  io.to(`stock:${symbol}`).emit('priceUpdate', data);
-  io.emit('marketTick', data);
+const broadcastPriceUpdate = (symbol, data) => {
+  if (!socketIo) {
+    return;
+  }
+
+  socketIo.to(`stock:${symbol}`).emit('priceUpdate', data);
+  socketIo.emit('marketTick', data);
 };
 
 module.exports = {

@@ -1,5 +1,4 @@
 const Stock = require('../models/Stock');
-const { io } = require('../index');
 const { broadcastPriceUpdate } = require('../socket');
 const { cache } = require('../config/redis');
 const { logger } = require('../utils/logger');
@@ -18,7 +17,7 @@ const updateStockPrices = async () => {
     const change = parseFloat((newPrice - stock.previousClose).toFixed(2));
     const changePercent = parseFloat(((change / stock.previousClose) * 100).toFixed(2));
 
-    broadcastPriceUpdate(io, stock.symbol, {
+    broadcastPriceUpdate(stock.symbol, {
       symbol: stock.symbol,
       currentPrice: newPrice,
       change,
