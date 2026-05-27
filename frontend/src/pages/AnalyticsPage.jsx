@@ -2,235 +2,264 @@ import React from 'react';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
 import { 
-  BarChart3, PieChart, TrendingUp, TrendingDown, 
-  Award, RefreshCw, BarChart2, ShieldAlert 
+  BarChart3, RefreshCw, Award, PieChart, Activity, CheckCircle2, ChevronRight 
 } from 'lucide-react';
 import { analyticsService } from '../services/api';
-
-const StatCard = ({ label, value, sub, type }) => {
-  const isPos = type === 'success' || (typeof value === 'string' && value.startsWith('+'));
-  const isNeg = type === 'danger' || (typeof value === 'string' && value.startsWith('-'));
-
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p className="text-slate-400 text-sm font-medium">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${
-        isPos ? 'text-emerald-400' : isNeg ? 'text-red-400' : 'text-white'
-      }`}>{value}</p>
-      {sub && <p className="text-slate-400 text-xs mt-1.5 font-medium">{sub}</p>}
-    </div>
-  );
-};
+import StatCard from '../components/ui/StatCard';
+import EquityChart from '../components/charts/EquityChart';
+import PnLBarChart from '../components/charts/PnLBarChart';
+import AllocationPie from '../components/charts/AllocationPie';
+import WinRateGauge from '../components/charts/WinRateGauge';
+import Skeleton from '../components/ui/Skeleton';
 
 export default function AnalyticsPage() {
   const { data: analytics, isLoading, refetch } = useQuery(
     'analytics', 
-    () => analyticsService.get().then(r => r.data),
+    () => analyticsService.get(),
     { refetchOnWindowFocus: false }
   );
 
-  const summary = analytics?.summary || { totalSells: 0, wins: 0, winRate: 0, totalPnL: 0, avgPnL: 0, bestTrade: 0, worstTrade: 0 };
+  const summary = analytics?.summary || {};
   const pnlByMonth = analytics?.pnlByMonth || [];
   const sectorExposure = analytics?.sectorExposure || [];
   const mostTraded = analytics?.mostTraded || [];
+  const mostProfitable = analytics?.mostProfitable || [];
+  const equityCurve = analytics?.equityCurve || [];
 
-  const hasTrades = summary.totalSells > 0;
+  const sellCount = summary.sellCount ?? summary.totalSells ?? 0;
+  const winCount = summary.winCount ?? summary.wins ?? 0;
+  const lossCount = summary.lossCount ?? 0;
+  const totalPnL = summary.totalRealizedPnL ?? summary.totalPnL ?? 0;
+  const avgPnL = summary.avgPnL ?? summary.avgWin ?? 0;
+  const bestTrade = summary.bestTrade || null;
+  const worstTrade = summary.worstTrade || null;
   const winRate = summary.winRate || 0;
-  const isWinRateHigh = winRate >= 50;
+  const profitFactor = summary.profitFactor ?? 1.5;
 
-  // Month names
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const hasTrades = statsCount() > 0;
+
+  function statsCount() {
+    return (analytics?.summary?.totalTrades ?? 0);
+  }
+
+  // Calculate a Trader Score out of 100 based on winRate, profitFactor, and trades
+  const calculateTraderScore = () => {
+    const rateFactor = winRate * 0.4; // up to 40
+    const profitScore = Math.min((profitFactor || 1) * 15, 40); // up to 40
+    const volumeScore = Math.min(statsCount() * 0.5, 20); // up to 20
+    return Math.min(Math.round(rateFactor + profitScore + volumeScore), 100);
+  };
+
+  const traderScore = calculateTraderScore();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fadeIn">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Performance Analytics</h1>
-          <p className="text-slate-400 mt-1">Deep dive into your closed trades, win rate, and portfolio allocation.</p>
+          <h1 className="text-2xl font-black text-slate-100 tracking-tight">Performance Analytics</h1>
+          <p className="text-xs text-slate-400 mt-1">Deep terminal inspection of closed trades, profitability weightings, and diversifications.</p>
         </div>
         <button 
           onClick={() => refetch()}
-          className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 px-4 py-2 rounded-lg transition text-sm font-medium"
+          className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 px-4 py-2 rounded-xl transition text-xs font-bold"
         >
-          <RefreshCw size={15} />
-          Refresh
+          <RefreshCw size={13} />
+          Refresh Stats
         </button>
       </div>
 
       {isLoading ? (
-        <div className="space-y-6 animate-pulse">
+        <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-28 bg-slate-900/50 border border-slate-800 rounded-xl"></div>
+            {Array(4).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full animate-pulse" />
             ))}
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-96 bg-slate-900/50 border border-slate-800 rounded-xl"></div>
-            <div className="h-96 bg-slate-900/50 border border-slate-800 rounded-xl"></div>
+            <Skeleton className="lg:col-span-2 h-96 w-full animate-pulse" />
+            <Skeleton className="h-96 w-full animate-pulse" />
           </div>
         </div>
       ) : !hasTrades ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
-          <div className="inline-flex p-4 rounded-full bg-slate-800 text-slate-400 mb-4">
+        <div className="glass-card rounded-2xl border-slate-900 p-12 text-center max-w-2xl mx-auto shadow-2xl">
+          <div className="inline-flex p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-emerald-400 mb-5 shadow-inner">
             <BarChart3 size={32} />
           </div>
-          <h3 className="text-lg font-bold text-white mb-2">No Performance Metrics Available</h3>
-          <p className="text-slate-400 text-sm max-w-md mx-auto mb-6">
-            Analytics are computed based on your closed trades (SELL orders). Once you sell some holdings, you'll see a complete breakdown of your metrics, win rate, and sector allocations.
+          <h3 className="text-lg font-extrabold text-slate-100 mb-2">No Position Analytics Recorded</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto mb-6 leading-relaxed">
+            Analytics metrics are automatically compiled once you execute and close trades (SELL orders). Purchase stock holdings inside the Market terminal, execute a sale, and inspect your pro performance graphs here.
           </p>
           <Link 
             to="/market" 
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2.5 rounded-lg transition inline-flex items-center gap-1.5"
+            className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs px-6 py-3 rounded-xl transition shadow-lg shadow-emerald-500/10 inline-flex items-center gap-1.5"
           >
-            Explore Market
+            Open Market Terminal <ChevronRight size={13} />
           </Link>
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Key Metrics Grid */}
+          {/* Key Metrics Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard 
-              label="Win Rate" 
+              label="Win Rate Ratio" 
               value={`${winRate.toFixed(1)}%`} 
-              sub={`${summary.wins} wins out of ${summary.totalSells} trades`}
-              type={isWinRateHigh ? 'success' : 'danger'}
+              subtext={`${winCount} wins / ${sellCount} sales`}
+              icon={CheckCircle2}
+              color={winRate >= 50 ? 'emerald' : 'amber'}
             />
             <StatCard 
-              label="Total Realized P&L" 
-              value={`${summary.totalPnL >= 0 ? '+' : ''}$${summary.totalPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              sub="Sum of all closed trades"
-              type={summary.totalPnL >= 0 ? 'success' : 'danger'}
+              label="Realized Net P&L" 
+              value={`${totalPnL >= 0 ? '+' : ''}$${totalPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              subtext="Sum of closed executions"
+              icon={Activity}
+              color={totalPnL >= 0 ? 'emerald' : 'red'}
             />
             <StatCard 
-              label="Average Trade Return" 
-              value={`${summary.avgPnL >= 0 ? '+' : ''}$${summary.avgPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              sub="Average gain/loss per sale"
-              type={summary.avgPnL >= 0 ? 'success' : 'danger'}
+              label="Average Sale P&L" 
+              value={`${avgPnL >= 0 ? '+' : ''}$${avgPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              subtext="Mean return per sell"
+              icon={BarChart3}
+              color={avgPnL >= 0 ? 'emerald' : 'red'}
             />
             <StatCard 
-              label="Best Trade" 
-              value={`+$${(summary.bestTrade || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              sub="Your highest single trade profit"
-              type="success"
+              label="Best Closed Profit" 
+              value={bestTrade ? `+$${bestTrade.pnl?.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00'}
+              subtext={bestTrade ? `Single sell of ${bestTrade.symbol}` : 'No profit yet'}
+              icon={Award}
+              color="emerald"
             />
           </div>
 
+          {/* Performance Curves & Win Rate Gauge Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Sector Diversification */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col justify-between">
+            {/* Equity performance curve */}
+            <div className="lg:col-span-2 glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-4 shadow-xl">
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <PieChart size={18} className="text-emerald-400" />
-                  <h2 className="font-semibold text-white">Portfolio Diversification</h2>
-                </div>
-                <p className="text-xs text-slate-400 mb-6">
-                  Recommended exposure is less than 30% per sector to minimize market correlation risks.
-                </p>
-                <div className="space-y-4">
-                  {sectorExposure.length === 0 ? (
-                    <p className="text-sm text-slate-500">No active holdings exposure.</p>
-                  ) : (
-                    sectorExposure.map((sectorObj) => {
-                      const isHighRisk = sectorObj.percent > 30;
-                      return (
-                        <div key={sectorObj.sector} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs font-semibold">
-                            <span className="text-slate-300">{sectorObj.sector}</span>
-                            <span className={isHighRisk ? 'text-amber-400 font-bold' : 'text-slate-400'}>
-                              {sectorObj.percent.toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-all ${
-                                isHighRisk ? 'bg-amber-500' : 'bg-emerald-500'
-                              }`} 
-                              style={{ width: `${Math.min(100, sectorObj.percent)}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-500">
-                            <span>Allocation Value</span>
-                            <span>${sectorObj.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                <h2 className="text-sm font-bold text-slate-200">Equity Value Progression</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Live account cash curve mapped over trade execution timestamps</p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-800 flex items-start gap-2.5 text-xs text-slate-400 bg-slate-950/40 p-3 rounded-lg">
-                <Award size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span>Sector breakdown is updated automatically based on stock prices.</span>
+              <div className="h-[220px]">
+                <EquityChart data={equityCurve} />
               </div>
             </div>
 
-            {/* Performance by Month */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <BarChart2 size={18} className="text-emerald-400" />
-                <h2 className="font-semibold text-white">Monthly Returns Summary</h2>
+            {/* Circular Win Rate Gauge & Trader Score */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col items-center justify-between shadow-xl">
+              <div className="w-full text-left">
+                <h2 className="text-sm font-bold text-slate-200">Win/Loss Distribution</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Aggregate profitability ratios</p>
               </div>
-              {pnlByMonth.length === 0 ? (
-                <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-                  No monthly data recorded yet.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {pnlByMonth.slice(-6).map((m, idx) => {
-                    const isPos = m.pnl >= 0;
-                    return (
-                      <div key={idx} className="flex items-center justify-between py-2.5 border-b border-slate-800/60 last:border-b-0 hover:bg-slate-800/10 px-2 rounded-lg transition -mx-2">
-                        <div>
-                          <div className="font-semibold text-white">{monthNames[m.month - 1] || `Month ${m.month}`} {m.year}</div>
-                          <div className="text-slate-400 text-xs mt-0.5">{m.trades} transaction{m.trades > 1 ? 's' : ''}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`font-bold ${isPos ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {isPos ? '+' : ''}${m.pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+
+              <div className="my-2">
+                <WinRateGauge winRate={winRate} />
+              </div>
+
+              {/* Trader Score custom visual block */}
+              <div className="w-full bg-slate-950/50 border border-slate-900/60 p-4 rounded-xl text-center relative overflow-hidden backdrop-blur-sm shadow-inner">
+                <div className="absolute top-0 right-0 w-12 h-12 bg-cyan-500/5 rounded-full filter blur-[15px] pointer-events-none" />
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Trader Grade Score</span>
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent block mt-1 tracking-tight">
+                  {traderScore} <span className="text-xs text-slate-400 font-bold">/ 100</span>
+                </span>
+                <span className="text-[8px] font-bold text-slate-400 block mt-1 uppercase tracking-wide">
+                  {traderScore >= 80 ? '👑 Master Level' : traderScore >= 60 ? '⚡ Advanced Level' : '🌱 Novice Level'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly returns summary & Sector exposures donut */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Monthly P&L Chart */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-4 shadow-xl">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">Monthly Returns Summary</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Closed realized earnings aggregated by calendar months</p>
+              </div>
+              <div className="h-[220px]">
+                <PnLBarChart data={pnlByMonth} />
+              </div>
             </div>
 
-            {/* Most Traded Assets */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <BarChart3 size={18} className="text-emerald-400" />
-                <h2 className="font-semibold text-white">Most Active Assets</h2>
+            {/* Sector exposure donut */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-4 shadow-xl">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">Sector Exposure Allocation</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Asset diversification weightings by sector classifications</p>
               </div>
-              {mostTraded.length === 0 ? (
-                <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-                  No activity recorded.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {mostTraded.map((item, idx) => (
-                    <div key={item._id} className="flex items-center justify-between py-2.5 border-b border-slate-800/60 last:border-b-0">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-white border border-slate-700">
-                          {idx + 1}
+              <div className="h-[220px] flex items-center justify-center">
+                <AllocationPie data={sectorExposure} nameKey="sector" valueKey="value" />
+              </div>
+            </div>
+          </div>
+
+          {/* Most Active & Most Profitable lists */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Most active stocks */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-4 shadow-xl">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">Top Volume Assets</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Most actively executed stock positions by trade count</p>
+              </div>
+
+              <div className="space-y-1">
+                {mostTraded.slice(0, 5).map((item, idx) => (
+                  <div key={item.symbol} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-slate-900/60 hover:border-slate-800 transition-all">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800/80 text-[10px] font-black text-slate-400 flex items-center justify-center font-mono-numbers">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <Link to={`/market/${item.symbol}`} className="text-xs font-bold text-slate-200 hover:text-emerald-400 transition-colors">
+                          {item.symbol}
+                        </Link>
+                        <div className="text-[9px] text-slate-500 font-semibold mt-0.5">
+                          Volume Value: ${item.volume?.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                         </div>
-                        <div>
-                          <Link to={`/market/${item._id}`} className="font-semibold text-white hover:text-emerald-400 transition">
-                            {item._id}
-                          </Link>
-                          <div className="text-slate-400 text-xs mt-0.5">Volume: ${item.volume.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-full font-bold">
-                          {item.count} trade{item.count > 1 ? 's' : ''}
-                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <span className="text-[9px] font-bold text-slate-300 bg-slate-900 border border-slate-800/80 px-2.5 py-1 rounded-lg">
+                      {item.count} trades
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Most profitable stocks */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-4 shadow-xl">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">Most Profitable Holdings</h2>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Closed asset positions ranked by cumulative profit dollars</p>
+              </div>
+
+              <div className="space-y-1">
+                {mostProfitable.length === 0 ? (
+                  <p className="py-8 text-center text-slate-500 text-xs">No profits logged yet.</p>
+                ) : (
+                  mostProfitable.slice(0, 5).map((item, idx) => (
+                    <div key={item.symbol} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-slate-900/60 hover:border-slate-800 transition-all">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800/80 text-[10px] font-black text-slate-400 flex items-center justify-center font-mono-numbers">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <Link to={`/market/${item.symbol}`} className="text-xs font-bold text-slate-200 hover:text-emerald-400 transition-colors">
+                            {item.symbol}
+                          </Link>
+                          <div className="text-[9px] text-slate-500 font-semibold mt-0.5">
+                            Total Trades: {item.trades}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold font-mono-numbers text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                        +${item.totalPnL?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -1,10 +1,12 @@
-const { Router } = require('express');
+const express = require('express');
+const router = express.Router();
+const { getAnalytics, getEquityCurve, getPnLByMonth, getTopSymbols } = require('../controllers/analytics.controller');
 const { protect } = require('../middleware/auth');
-const { getAnalytics } = require('../controllers/analyticsController');
 
-const router = Router();
-
-router.use(protect);
-router.get('/', getAnalytics);
+// GET /api/analytics routes (protected)
+router.get('/', protect, getAnalytics);
+router.get('/equity-curve', protect, getEquityCurve);
+router.get('/monthly', protect, getPnLByMonth);
+router.get('/symbols', protect, getTopSymbols);
 
 module.exports = router;

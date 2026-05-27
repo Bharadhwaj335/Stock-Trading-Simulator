@@ -53,7 +53,17 @@ const broadcastPriceUpdate = (symbol, data) => {
   socketIo.emit('marketTick', data);
 };
 
+const emitToUser = (userId, eventName, payload) => {
+  if (!socketIo || !userId) {
+    return false;
+  }
+
+  socketIo.to(`user:${userId}`).emit(eventName, payload);
+  return true;
+};
+
 module.exports = {
   initSocketServer,
   broadcastPriceUpdate,
+  emitToUser,
 };

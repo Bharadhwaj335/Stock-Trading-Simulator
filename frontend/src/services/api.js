@@ -1,6 +1,18 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+const readPersistedAccessToken = () => {
+  try {
+    const raw = window.localStorage.getItem('auth-storage');
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.accessToken || null;
+  } catch {
+    return null;
+  }
+};
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
@@ -9,8 +21,9 @@ export const api = axios.create({
 // Attach token dynamically using a request interceptor to break circular dependency
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().accessToken;
+    const token = useAuthStore.getState().accessToken || readPersistedAccessToken();
     if (token) {
+      config.headers = config.headers || {};
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
@@ -49,7 +62,7 @@ api.interceptors.response.use(
       const { refreshToken, setAuth, user } = useAuthStore.getState();
       try {
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/refresh`,
           { refreshToken }
         );
         const newToken = data.accessToken;
@@ -93,15 +106,32 @@ export const tradeService = {
 
 export const portfolioService = {
   get: () => api.get('/portfolio').then(r => r.data.data),
+  reset: () => api.post('/portfolio/reset').then(r => r.data),
 };
 
 export const analyticsService = {
-  get: () => api.get('/analytics'),
+  get: () => api.get('/analytics').then(r => r.data),
+  getEquityCurve: () => api.get('/analytics/equity-curve').then(r => r.data),
+  getMonthly: (year) => api.get('/analytics/monthly', { params: { year } }).then(r => r.data),
+  getSymbols: () => api.get('/analytics/symbols').then(r => r.data),
 };
 
 export const leaderboardService = {
-  get:    (page = 1) => api.get('/leaderboard', { params: { page } }),
-  follow: (userId) => api.post(`/leaderboard/${userId}/follow`),
+  get:    (page = 1) => api.get('/leaderboard', { params: { page } }).then(r => r.data),
+  follow: (userId) => api.post(`/leaderboard/${userId}/follow`).then(r => r.data),
+  getFeed: () => api.get('/leaderboard/feed').then(r => r.data),
+  getWeekly: () => api.get('/leaderboard/weekly').then(r => r.data),
+};
+
+export const watchlistService = {
+  get: () => api.get('/users/watchlist').then(r => r.data),
+  add: (symbol) => api.post(`/users/watchlist/${symbol}`).then(r => r.data),
+  remove: (symbol) => api.delete(`/users/watchlist/${symbol}`).then(r => r.data),
+};
+
+export const newsService = {
+  getMarket: () => api.get('/news').then(r => r.data),
+  getStock: (symbol) => api.get(`/news/${symbol}`).then(r => r.data),
 };
 
 export const alertService = {
@@ -115,4 +145,6 @@ export const userService = {
   getMe:   () => api.get('/users/me'),
   updateMe: (data) =>
     api.patch('/users/me', data),
+  changePassword: (currentPassword, newPassword) =>
+    api.post('/users/change-password', { currentPassword, newPassword }).then(r => r.data),
 };

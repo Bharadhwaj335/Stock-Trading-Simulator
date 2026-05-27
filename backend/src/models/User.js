@@ -1,10 +1,23 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const emailRegex = /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.edu|[a-zA-Z0-9.-]+\.edu\.[a-zA-Z]{2,}|[a-zA-Z0-9.-]+\.ac\.[a-zA-Z]{2,}|gmail\.com|yahoo\.com|outlook\.com|hotmail\.com|icloud\.com)$/i;
+
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   name: { type: String },
-  email: { type: String, required: true, unique: true, lowercase: true },
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    lowercase: true,
+    validate: {
+      validator: function(v) {
+        return emailRegex.test(v);
+      },
+      message: 'Email domain not allowed. Please use standard providers (@gmail, @yahoo, @outlook, @icloud) or educational student emails (.edu, .edu.in).'
+    }
+  },
   password: { type: String, required: true },
   walletBalance: { type: Number, default: Number(process.env.STARTING_BALANCE) || 30000 },
   avatar: { type: String, default: null },

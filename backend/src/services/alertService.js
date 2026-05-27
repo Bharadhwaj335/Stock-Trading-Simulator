@@ -1,6 +1,6 @@
 const Alert = require('../models/Alert');
 const Stock = require('../models/Stock');
-const { io } = require('../index');
+const { emitToUser } = require('../socket');
 const { logger } = require('../utils/logger');
 
 const checkAndFireAlerts = async () => {
@@ -27,7 +27,7 @@ const checkAndFireAlerts = async () => {
       const userId = alert.user && (alert.user._id ? String(alert.user._id) : String(alert.user));
 
       if (userId) {
-        io.to(`user:${userId}`).emit('alertTriggered', {
+        emitToUser(userId, 'alertTriggered', {
           symbol: alert.symbol,
           condition: alert.condition,
           targetPrice: alert.targetPrice,

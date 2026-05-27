@@ -115,6 +115,15 @@ const executeTradeLogic = async (userId, symbol, type, qty, session = null) => {
   await portfolio.save(sessionOpt);
   await trade.save(sessionOpt);
 
+  const User = require('../models/User');
+  await User.findByIdAndUpdate(userId, { walletBalance: wallet.balance }, sessionOpt);
+
+  // Check and award badges asynchronously
+  const badgeService = require('./badgeService');
+  badgeService.checkAndAwardBadges(userId).catch(err => {
+    console.error('Failed to run badge check:', err);
+  });
+
   return { trade, newBalance: wallet.balance };
 };
 

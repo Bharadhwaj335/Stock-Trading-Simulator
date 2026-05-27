@@ -25,9 +25,11 @@ const portfolioRoutes = require('./routes/portfolio');
 const alertRoutes = require('./routes/alerts');
 const leaderboardRoutes = require('./routes/leaderboard');
 const analyticsRoutes = require('./routes/analytics');
+const newsRoutes = require('./routes/news');
 
 const app = express();
 const httpServer = http.createServer(app);
+let isShuttingDown = false;
 
 const defaultClientOrigins = [
   'http://localhost:5173',
@@ -94,6 +96,7 @@ app.use('/api/portfolio',   portfolioRoutes);
 app.use('/api/alerts',      alertRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/analytics',   analyticsRoutes);
+app.use('/api/news',        newsRoutes);
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
@@ -102,10 +105,30 @@ app.use(errorHandler);
 
 // ── Boot ──
 const PORT = process.env.PORT || 5000;
+const shutdown = (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  logger.info(`Received ${signal}, shutting down server`);
+  httpServer.close(() => process.exit(0));
+};
+
+const listenServer = () => {
+  httpServer.once('error', (error) => {
+    logger.error('Server listen failed', error);
+    process.exit(1);
+  });
+
+  httpServer.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+};
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGUSR2', () => shutdown('SIGUSR2'));
+
 (async () => {
   await connectDB();
   await connectRedis();
   startCronJobs();
   startPricePoller();
-  httpServer.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+  listenServer();
 })();

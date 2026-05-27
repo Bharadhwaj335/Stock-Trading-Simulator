@@ -8,6 +8,7 @@ export const useAuthStore = create(
       user: null,
       accessToken: null,
       refreshToken: null,
+      hasHydrated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
         set({ user, accessToken, refreshToken });
@@ -26,7 +27,18 @@ export const useAuthStore = create(
         delete api.defaults.headers.common['Authorization'];
         set({ user: null, accessToken: null, refreshToken: null });
       },
+
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
-    { name: 'auth-storage', partialize: state => ({ user: state.user, accessToken: state.accessToken, refreshToken: state.refreshToken }) }
+    {
+      name: 'auth-storage',
+      partialize: state => ({ user: state.user, accessToken: state.accessToken, refreshToken: state.refreshToken }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.accessToken) {
+          api.defaults.headers.common['Authorization'] = `Bearer ${state.accessToken}`;
+        }
+        state?.setHasHydrated?.(true);
+      },
+    }
   )
 );

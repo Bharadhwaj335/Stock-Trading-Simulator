@@ -3,31 +3,56 @@ const PriceCache = require('../models/PriceCache');
 const Stock = require('../models/Stock');
 const { SUPPORTED_SYMBOLS, SECTORS } = require('../config/constants');
 
-const POLYGON_KEY = process.env.POLYGON_API_KEY;
-const POLYGON_BASE = 'https://api.polygon.io';
+const FMP_KEY = process.env.FMP_API_KEY;
+const ALPHA_KEY = process.env.ALPHA_VANTAGE_API_KEY;
+const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+const ALPHA_BASE = 'https://www.alphavantage.co/query';
 
-/**
- * Fallback to local MongoDB Stock collection if Polygon API fails or rate-limits/plans reject us.
- * Synchronizes the PriceCache from the seeded Stock DB so the rest of the application runs perfectly.
- */
+// ─── Shared axios with retry-once on timeout ────────────────────────────────
+
+const safeGet = async (url, opts = {}) => {
+  try {
+    return await axios.get(url, { timeout: 12000, ...opts });
+  } catch (err) {
+    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+      // Retry once after 2 seconds
+      await new Promise(r => setTimeout(r, 2000));
+      return axios.get(url, { timeout: 15000, ...opts });
+    }
+    throw err;
+  }
+};
+
+// ─── Helper ─────────────────────────────────────────────────────────────────
+
+const formatMarketCap = (num) => {
+  if (!num || isNaN(num)) return '';
+  if (num >= 1e12) return `$${(num / 1e12).toFixed(1)}T`;
+  if (num >= 1e9)  return `$${(num / 1e9).toFixed(1)}B`;
+  if (num >= 1e6)  return `$${(num / 1e6).toFixed(1)}M`;
+  return `$${num}`;
+};
+
+// ─── Fallback: Local Stock DB with simulated micro-drift ────────────────────
+
 const loadFallbackPricesFromStockDB = async () => {
   try {
     const stocks = await Stock.find({}).lean();
     if (stocks.length === 0) {
-      console.warn('[priceService] Local Stock DB is empty. Seeding/Fallback not possible.');
+      console.warn('[priceService] Local Stock DB is empty. Cannot fallback.');
       return;
     }
 
-    const bulkOps = [];
-    stocks.forEach((s) => {
-      // Simulate minor variations to look alive
+    const bulkOps = stocks.map((s) => {
       const volatility = 0.002;
       const drift = (Math.random() - 0.5) * volatility;
       const newPrice = Number((s.currentPrice * (1 + drift)).toFixed(2));
       const change = Number((newPrice - s.previousClose).toFixed(2));
-      const changePercent = s.previousClose ? Number(((change / s.previousClose) * 100).toFixed(2)) : 0;
+      const changePercent = s.previousClose
+        ? Number(((change / s.previousClose) * 100).toFixed(2))
+        : 0;
 
-      bulkOps.push({
+      return {
         updateOne: {
           filter: { symbol: s.symbol },
           update: {
@@ -41,75 +66,59 @@ const loadFallbackPricesFromStockDB = async () => {
               volume:        s.volume || 1000000,
               change,
               changePercent,
-              sector:        s.sector || 'Other',
+              sector:        SECTORS[s.symbol] || s.sector || 'Other',
               updatedAt:     new Date(),
             },
           },
           upsert: true,
         },
-      });
+      };
     });
 
     await PriceCache.bulkWrite(bulkOps);
-    console.log(`[priceService] Synchronized PriceCache with ${bulkOps.length} fallback stocks from database`);
+    console.log(`[priceService] Fallback: synced ${bulkOps.length} stocks from local DB`);
   } catch (err) {
     console.error('[priceService] loadFallbackPricesFromStockDB error:', err.message);
   }
 };
 
-/**
- * Fetches snapshot prices for ALL supported symbols in a single Polygon API call.
- * Endpoint: GET /v2/snapshot/locale/us/markets/stocks/tickers
- * Updates PriceCache collection with upsert for each symbol.
- */
-const refreshAllPrices = async () => {
-  try {
-    const tickerList = SUPPORTED_SYMBOLS.join(',');
-    const url = `${POLYGON_BASE}/v2/snapshot/locale/us/markets/stocks/tickers`;
+// ─── FMP: Batch real-time quotes ─────────────────────────────────────────────
 
-    let data;
+const refreshAllPricesFromFMP = async () => {
+  if (!FMP_KEY) throw new Error('No FMP API key');
+  const bulkOps = [];
+  const stockBulkOps = [];
+
+  // Since batch quote is blocked on new keys, request symbols individually in parallel
+  const tasks = SUPPORTED_SYMBOLS.map(async (symbol) => {
     try {
-      const response = await axios.get(url, {
-        params: { tickers: tickerList, apiKey: POLYGON_KEY },
-        timeout: 10000,
-      });
-      data = response.data;
-    } catch (apiErr) {
-      console.warn(`[priceService] Polygon API failed (${apiErr.message}). Falling back to local stock database...`);
-      await loadFallbackPricesFromStockDB();
-      return;
-    }
+      const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${FMP_KEY}`;
+      const { data } = await safeGet(url);
+      const q = Array.isArray(data) ? data[0] : data;
+      if (!q || !q.symbol) return;
 
-    if (!data.tickers || data.tickers.length === 0) {
-      console.warn('[priceService] Polygon returned no tickers, falling back...');
-      await loadFallbackPricesFromStockDB();
-      return;
-    }
-
-    const bulkOps = [];
-    const stockBulkOps = [];
-
-    data.tickers.forEach((t) => {
-      const day = t.day || {};
-      const prevDay = t.prevDay || {};
-      const price = day.c || prevDay.c || 0;
+      const price = q.price ?? 0;
+      const change = q.change ?? 0;
+      const changePercent = q.changePercentage ?? 0;
+      const open = q.open ?? price;
+      const high = q.dayHigh ?? price;
+      const low = q.dayLow ?? price;
+      const prevClose = q.previousClose ?? price;
+      const volume = q.volume ?? 0;
+      const companyName = q.name ?? symbol;
 
       bulkOps.push({
         updateOne: {
-          filter: { symbol: t.ticker },
+          filter: { symbol },
           update: {
             $set: {
-              symbol:        t.ticker,
-              price:         price,
-              open:          day.o || 0,
-              high:          day.h || 0,
-              low:           day.l || 0,
-              previousClose: prevDay.c || 0,
-              volume:        day.v || 0,
-              change:        t.todaysChange || 0,
-              changePercent: t.todaysChangePerc || 0,
-              sector:        SECTORS[t.ticker] || 'Other',
-              updatedAt:     new Date(),
+              symbol, price, open, high, low,
+              previousClose: prevClose, volume, change,
+              changePercent: Number(changePercent.toFixed(4)),
+              companyName,
+              marketCap: q.marketCap ? formatMarketCap(q.marketCap) : '',
+              sector: SECTORS[symbol] || 'Other',
+              updatedAt: new Date(),
             },
           },
           upsert: true,
@@ -118,212 +127,459 @@ const refreshAllPrices = async () => {
 
       stockBulkOps.push({
         updateOne: {
-          filter: { symbol: t.ticker },
+          filter: { symbol },
           update: {
             $set: {
-              symbol:        t.ticker,
-              currentPrice:  price,
-              previousClose: prevDay.c || 0,
-              change:        t.todaysChange || 0,
-              changePercent: t.todaysChangePerc || 0,
-              sector:        SECTORS[t.ticker] || 'Other',
-              volume:        day.v || 0,
-              lastUpdated:   new Date(),
+              symbol, name: companyName, currentPrice: price,
+              previousClose: prevClose, change,
+              changePercent: Number(changePercent.toFixed(4)),
+              sector: SECTORS[symbol] || 'Other',
+              volume, marketCap: q.marketCap || 0,
+              lastUpdated: new Date(),
             },
           },
           upsert: true,
         },
       });
-    });
+    } catch (err) {
+      console.warn(`[priceService] FMP failed for ${symbol}: ${err.message}`);
+    }
+  });
 
-    await PriceCache.bulkWrite(bulkOps);
-    await Stock.bulkWrite(stockBulkOps);
-    console.log(`[priceService] Updated price cache and stock collections for ${bulkOps.length} symbols`);
-  } catch (err) {
-    console.error('[priceService] refreshAllPrices error:', err.message);
-    await loadFallbackPricesFromStockDB();
-  }
+  await Promise.all(tasks);
+
+  if (bulkOps.length === 0) throw new Error('FMP returned no quotes for any symbols');
+
+  await PriceCache.bulkWrite(bulkOps);
+  await Stock.bulkWrite(stockBulkOps);
+  console.log(`[priceService] ✅ FMP: Updated ${bulkOps.length} symbols with stable API`);
 };
 
-/**
- * Fetches company details for a single symbol from Polygon.
- * Endpoint: GET /v3/reference/tickers/{symbol}
- * Used when a user opens a stock detail page and we need description, market cap, etc.
- * Results are merged into PriceCache so we don't re-fetch on every visit.
- */
+// ─── Yahoo Finance: Batch fallback ───────────────────────────────────────────
+
+const refreshAllPricesFromYahoo = async () => {
+  const bulkOps = [];
+  const stockBulkOps = [];
+
+  // Fetch all symbols in parallel using the keyless, high-rate-limit v8 chart endpoint
+  const tasks = SUPPORTED_SYMBOLS.map(async (symbol) => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=5m`;
+      const { data } = await safeGet(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      const q = data.chart?.result?.[0]?.meta;
+      if (!q) return;
+
+      const price = q.regularMarketPrice ?? 0;
+      const prevClose = q.previousClose ?? price;
+      const change = Number((price - prevClose).toFixed(2));
+      const changePercent = prevClose ? Number(((change / prevClose) * 100).toFixed(4)) : 0;
+      const open = q.regularMarketOpen ?? prevClose;
+      const high = q.regularMarketDayHigh ?? price;
+      const low = q.regularMarketDayLow ?? price;
+      const volume = q.regularMarketVolume ?? 0;
+      const companyName = q.longName ?? q.shortName ?? symbol;
+
+      bulkOps.push({
+        updateOne: {
+          filter: { symbol },
+          update: {
+            $set: {
+              symbol, price, open, high, low,
+              previousClose: prevClose, volume, change, changePercent,
+              companyName,
+              marketCap: q.marketCap ? formatMarketCap(q.marketCap) : '',
+              sector: SECTORS[symbol] || 'Other',
+              updatedAt: new Date(),
+            },
+          },
+          upsert: true,
+        },
+      });
+
+      stockBulkOps.push({
+        updateOne: {
+          filter: { symbol },
+          update: {
+            $set: {
+              symbol, name: companyName, currentPrice: price,
+              previousClose: prevClose, change, changePercent,
+              sector: SECTORS[symbol] || 'Other',
+              volume, marketCap: q.marketCap || 0,
+              lastUpdated: new Date(),
+            },
+          },
+          upsert: true,
+        },
+      });
+    } catch (err) {
+      console.warn(`[priceService] Yahoo Finance failed for ${symbol}: ${err.message}`);
+    }
+  });
+
+  await Promise.all(tasks);
+
+  if (bulkOps.length === 0) throw new Error('Yahoo Finance returned no quotes for any symbols');
+
+  await PriceCache.bulkWrite(bulkOps);
+  await Stock.bulkWrite(stockBulkOps);
+  console.log(`[priceService] ✅ Yahoo Finance: Updated ${bulkOps.length} symbols`);
+};
+
+// ─── Main: Cascade price refresh ─────────────────────────────────────────────
+
+const refreshAllPrices = async () => {
+  // 1. Try Yahoo Finance (free, unlimited, real-time in parallel)
+  try {
+    await refreshAllPricesFromYahoo();
+    return;
+  } catch (err) {
+    console.warn(`[priceService] Yahoo Finance failed: ${err.message}. Trying FMP...`);
+  }
+
+  // 2. Try FMP as backup (stable endpoint)
+  try {
+    await refreshAllPricesFromFMP();
+    return;
+  } catch (err) {
+    console.warn(`[priceService] FMP failed: ${err.message}. Using local DB fallback...`);
+  }
+
+  // 3. Final fallback: local DB with micro-drift
+  await loadFallbackPricesFromStockDB();
+};
+
+// ─── Company Details: FMP → Yahoo Finance → Local DB ─────────────────────────
+
+const fetchCompanyDetailsFromFMP = async (symbol) => {
+  if (!FMP_KEY) throw new Error('No FMP key');
+  const symbolUpper = symbol.toUpperCase();
+  const { data } = await safeGet(`https://financialmodelingprep.com/stable/profile?symbol=${symbolUpper}&apikey=${FMP_KEY}`);
+  const profile = Array.isArray(data) ? data[0] : data;
+  if (!profile || !profile.companyName) throw new Error('FMP profile empty');
+
+  return {
+    companyName: profile.companyName,
+    description: profile.description || `${profile.companyName} is a publicly traded company on ${profile.exchange}.`,
+    exchange: profile.exchange || 'NASDAQ',
+    marketCap: profile.marketCap || profile.mktCap ? formatMarketCap(profile.marketCap || profile.mktCap) : '',
+    ceo: profile.ceo || '',
+    sector: profile.sector || SECTORS[symbolUpper] || 'Other',
+    industry: profile.industry || '',
+    website: profile.website || '',
+    image: profile.image || '',
+  };
+};
+
 const fetchCompanyDetails = async (symbol) => {
   try {
-    const { data } = await axios.get(
-      `${POLYGON_BASE}/v3/reference/tickers/${symbol}`,
-      { params: { apiKey: POLYGON_KEY }, timeout: 8000 }
-    );
+    const symbolUpper = symbol.toUpperCase();
+    const cached = await PriceCache.findOne({ symbol: symbolUpper }).lean();
+    if (cached && cached.companyName && cached.marketCap && cached.description) {
+      return {
+        companyName: cached.companyName,
+        description: cached.description,
+        exchange: cached.exchange || 'NASDAQ',
+        marketCap: cached.marketCap,
+        sector: cached.sector || SECTORS[symbolUpper] || 'Other',
+      };
+    }
 
-    const r = data.results;
-    if (!r) throw new Error('No results from Polygon');
+    // Try FMP first
+    try {
+      const details = await fetchCompanyDetailsFromFMP(symbolUpper);
+      await PriceCache.updateOne(
+        { symbol: symbolUpper },
+        { $set: { ...details } },
+        { upsert: true }
+      );
+      await Stock.updateOne(
+        { symbol: symbolUpper },
+        { $set: { name: details.companyName, marketCap: 0 } },
+        { upsert: true }
+      );
+      return details;
+    } catch (fmpErr) {
+      console.warn(`[priceService] FMP company details failed for ${symbolUpper}: ${fmpErr.message}`);
+    }
 
-    const details = {
-      companyName: r.name || symbol,
-      description: r.description || '',
-      exchange:    r.primary_exchange || 'NASDAQ',
-      marketCap:   r.market_cap
-        ? formatMarketCap(r.market_cap)
-        : '',
-    };
+    // Try Yahoo Finance
+    try {
+      const { data } = await safeGet(
+        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolUpper}`
+      );
+      const q = data.quoteResponse?.result?.[0];
+      if (!q) throw new Error('No Yahoo quote');
 
-    await PriceCache.updateOne({ symbol }, { $set: details }, { upsert: true });
-    await Stock.updateOne(
-      { symbol },
-      { $set: { name: r.name || symbol, marketCap: r.market_cap || 0 } },
-      { upsert: true }
-    );
-    return details;
-  } catch (err) {
-    console.error(`[priceService] fetchCompanyDetails(${symbol}) error:`, err.message);
-    // Fallback to stock details from local database
-    const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
+      const companyName = q.longName || q.shortName || symbolUpper;
+      const details = {
+        companyName,
+        description: `${companyName} is a leading company traded globally on ${q.fullExchangeName || 'major exchanges'}.`,
+        exchange: q.fullExchangeName || 'NASDAQ',
+        marketCap: q.marketCap ? formatMarketCap(q.marketCap) : '',
+        sector: SECTORS[symbolUpper] || 'Other',
+      };
+
+      await PriceCache.updateOne({ symbol: symbolUpper }, { $set: details }, { upsert: true });
+      return details;
+    } catch (yahooErr) {
+      console.warn(`[priceService] Yahoo company details failed for ${symbolUpper}: ${yahooErr.message}`);
+    }
+
+    // Fallback to local stock DB
+    const stock = await Stock.findOne({ symbol: symbolUpper });
     if (stock) {
       const details = {
-        companyName: stock.name || symbol,
-        description: `${stock.name} is a leading company in the ${stock.sector} sector. This is local fallback description.`,
+        companyName: stock.name || symbolUpper,
+        description: `${stock.name || symbolUpper} is a publicly traded company in the ${stock.sector || 'technology'} sector.`,
         exchange: 'NASDAQ',
         marketCap: stock.marketCap ? formatMarketCap(stock.marketCap) : '',
+        sector: SECTORS[symbolUpper] || stock.sector || 'Other',
       };
-      await PriceCache.updateOne({ symbol }, { $set: details }, { upsert: true });
+      await PriceCache.updateOne({ symbol: symbolUpper }, { $set: details }, { upsert: true });
       return details;
     }
+
+    return null;
+  } catch (err) {
+    console.error(`[priceService] fetchCompanyDetails(${symbol}) error:`, err.message);
     return null;
   }
 };
 
-/**
- * Fetches historical OHLC bars for charting.
- * Endpoint: GET /v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from}/{to}
- */
+// ─── Historical Bars: Alpha Vantage → Yahoo Finance → Synthetic ──────────────
+
+const fetchHistoricalBarsFromAlphaVantage = async (symbol, range) => {
+  if (!ALPHA_KEY) throw new Error('No Alpha Vantage key');
+  const symbolUpper = symbol.toUpperCase();
+
+  // Map range to Alpha Vantage function params
+  const isIntraday = range === '1D';
+  let url;
+
+  if (isIntraday) {
+    url = `${ALPHA_BASE}?function=TIME_SERIES_INTRADAY&symbol=${symbolUpper}&interval=5min&outputsize=full&apikey=${ALPHA_KEY}`;
+  } else {
+    const outputsize = (range === '1Y') ? 'full' : 'compact';
+    url = `${ALPHA_BASE}?function=TIME_SERIES_DAILY&symbol=${symbolUpper}&outputsize=${outputsize}&apikey=${ALPHA_KEY}`;
+  }
+
+  const { data } = await safeGet(url);
+
+  // Alpha Vantage returns error messages in data object sometimes
+  if (data['Note'] || data['Information'] || data['Error Message']) {
+    throw new Error(`Alpha Vantage limit: ${data['Note'] || data['Information'] || data['Error Message']}`);
+  }
+
+  const seriesKey = isIntraday ? 'Time Series (5min)' : 'Time Series (Daily)';
+  const series = data[seriesKey];
+  if (!series) throw new Error('Alpha Vantage: No series data');
+
+  // Determine how many days to return based on range
+  const daysMap = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+  const cutoff = new Date(Date.now() - (daysMap[range] || 30) * 86400000);
+
+  const bars = Object.entries(series)
+    .map(([dateStr, ohlcv]) => {
+      const time = new Date(dateStr).getTime();
+      return {
+        time,
+        date: new Date(time).toISOString(),
+        open:   parseFloat(ohlcv['1. open']),
+        high:   parseFloat(ohlcv['2. high']),
+        low:    parseFloat(ohlcv['3. low']),
+        close:  parseFloat(ohlcv['4. close']),
+        volume: parseInt(ohlcv['5. volume'], 10),
+      };
+    })
+    .filter(b => b.close > 0 && new Date(b.time) >= cutoff)
+    .sort((a, b) => a.time - b.time);
+
+  if (bars.length === 0) throw new Error('Alpha Vantage: No bars after filtering');
+  return bars;
+};
+
+const fetchHistoricalBarsFromYahoo = async (symbol, range) => {
+  const symbolUpper = symbol.toUpperCase();
+  const yahooRangeMap = {
+    '1D': { range: '1d', interval: '5m' },
+    '1W': { range: '5d', interval: '15m' },
+    '1M': { range: '1mo', interval: '1d' },
+    '3M': { range: '3mo', interval: '1d' },
+    '6M': { range: '6mo', interval: '1d' },
+    '1Y': { range: '1y', interval: '1d' },
+  };
+
+  const config = yahooRangeMap[range] || yahooRangeMap['1M'];
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbolUpper}?range=${config.range}&interval=${config.interval}`;
+  const { data } = await safeGet(url);
+  const r = data.chart?.result?.[0];
+  if (!r) throw new Error('Yahoo Finance: No chart data');
+
+  const timestamps = r.timestamp || [];
+  const quote = r.indicators?.quote?.[0] || {};
+
+  const bars = timestamps.map((t, idx) => ({
+    time:   t * 1000,
+    date:   new Date(t * 1000).toISOString(),
+    open:   quote.open?.[idx] ?? quote.close?.[idx] ?? 0,
+    high:   quote.high?.[idx] ?? quote.close?.[idx] ?? 0,
+    low:    quote.low?.[idx] ?? quote.close?.[idx] ?? 0,
+    close:  quote.close?.[idx] ?? quote.open?.[idx] ?? 0,
+    volume: quote.volume?.[idx] ?? 0,
+  })).filter(b => b.close > 0);
+
+  if (bars.length === 0) throw new Error('Yahoo Finance: No valid bars');
+  return bars;
+};
+
 const fetchHistoricalBars = async (symbol, range = '1M') => {
+  // 1. Try Alpha Vantage (best OHLC quality)
   try {
-    const now = new Date();
-    const toDate = formatDate(now);
-
-    const rangeConfig = {
-      '1D': { multiplier: 5,  timespan: 'minute', daysBack: 1   },
-      '1W': { multiplier: 1,  timespan: 'hour',   daysBack: 7   },
-      '1M': { multiplier: 1,  timespan: 'day',    daysBack: 30  },
-      '3M': { multiplier: 1,  timespan: 'day',    daysBack: 90  },
-      '6M': { multiplier: 1,  timespan: 'day',    daysBack: 180 },
-      '1Y': { multiplier: 1,  timespan: 'day',    daysBack: 365 },
-    };
-
-    const config = rangeConfig[range] || rangeConfig['1M'];
-    const fromDate = formatDate(new Date(now - config.daysBack * 86400000));
-
-    const { data } = await axios.get(
-      `${POLYGON_BASE}/v2/aggs/ticker/${symbol}/range/${config.multiplier}/${config.timespan}/${fromDate}/${toDate}`,
-      {
-        params: { adjusted: true, sort: 'asc', limit: 300, apiKey: POLYGON_KEY },
-        timeout: 10000,
-      }
-    );
-
-    if (!data.results) throw new Error('No aggregates from Polygon');
-
-    return data.results.map((bar) => ({
-      time:   bar.t,                       // Unix ms timestamp
-      date:   new Date(bar.t).toISOString(),
-      open:   bar.o,
-      high:   bar.h,
-      low:    bar.l,
-      close:  bar.c,
-      volume: bar.v,
-    }));
+    const bars = await fetchHistoricalBarsFromAlphaVantage(symbol, range);
+    console.log(`[priceService] ✅ Alpha Vantage: ${bars.length} bars for ${symbol} (${range})`);
+    return bars;
   } catch (err) {
-    console.error(`[priceService] fetchHistoricalBars(${symbol}, ${range}) error:`, err.message);
-    // Fallback: return synthetic history for charting
-    const arr = [];
-    const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
-    const base = stock?.currentPrice || 150;
-    const limit = range === '1D' ? 24 : range === '1W' ? 30 : 30;
+    console.warn(`[priceService] Alpha Vantage bars failed for ${symbol}: ${err.message}`);
+  }
 
-    for (let i = limit; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const rand = Math.sin(i / 5) * 5 + (Math.random() - 0.5) * 3;
-      arr.push({
-        time:   d.getTime(),
-        date:   d.toISOString(),
-        open:   Number((base + rand - 1).toFixed(2)),
-        high:   Number((base + rand + 2).toFixed(2)),
-        low:    Number((base + rand - 3).toFixed(2)),
-        close:  Number((base + rand).toFixed(2)),
-        volume: Math.floor(Math.random() * 1e6) + 100000,
-      });
+  // 2. Try Yahoo Finance
+  try {
+    const bars = await fetchHistoricalBarsFromYahoo(symbol, range);
+    console.log(`[priceService] ✅ Yahoo Finance: ${bars.length} bars for ${symbol} (${range})`);
+    return bars;
+  } catch (err) {
+    console.warn(`[priceService] Yahoo Finance bars failed for ${symbol}: ${err.message}`);
+  }
+
+  // 3. Synthetic fallback with sin-wave oscillation
+  console.warn(`[priceService] All historical sources failed for ${symbol}. Generating synthetic bars.`);
+  const stock = await Stock.findOne({ symbol: symbol.toUpperCase() });
+  const base = stock?.currentPrice || 150;
+  const limit = range === '1D' ? 78 : range === '1W' ? 35 : 30;
+  const arr = [];
+
+  for (let i = limit; i >= 0; i--) {
+    const d = new Date();
+    if (range === '1D') {
+      d.setHours(d.getHours() - i);
+    } else {
+      d.setDate(d.getDate() - i);
     }
-    return arr;
-  }
-};
-
-/**
- * Fetches latest news articles for a symbol.
- * Endpoint: GET /v2/reference/news
- */
-const fetchStockNews = async (symbol) => {
-  try {
-    const { data } = await axios.get(`${POLYGON_BASE}/v2/reference/news`, {
-      params: { ticker: symbol, limit: 8, apiKey: POLYGON_KEY },
-      timeout: 8000,
+    const rand = Math.sin(i / 5) * 5 + (Math.random() - 0.5) * 3;
+    arr.push({
+      time:   d.getTime(),
+      date:   d.toISOString(),
+      open:   Number((base + rand - 1).toFixed(2)),
+      high:   Number((base + rand + 2).toFixed(2)),
+      low:    Number((base + rand - 3).toFixed(2)),
+      close:  Number((base + rand).toFixed(2)),
+      volume: Math.floor(Math.random() * 1e6) + 100000,
     });
-
-    return (data.results || []).map((article) => ({
-      title:       article.title,
-      description: article.description || '',
-      url:         article.article_url,
-      source:      article.publisher?.name || 'News',
-      publishedAt: article.published_utc,
-      imageUrl:    article.image_url || '',
-    }));
-  } catch (err) {
-    console.error(`[priceService] fetchStockNews(${symbol}) error:`, err.message);
-    // Fallback: return generic stock news
-    return [
-      {
-        title: `${symbol} Shows Strong Market resilience amidst sector shifts`,
-        description: `Analysts discuss the future trajectory of ${symbol} and its strategic positioning in the market.`,
-        url: 'https://finance.yahoo.com',
-        source: 'MarketWatch',
-        publishedAt: new Date().toISOString(),
-        imageUrl: '',
-      },
-      {
-        title: `Why investors are focusing on ${symbol} this quarter`,
-        description: `A detailed breakdown of key performance indicators and growth vectors for ${symbol}.`,
-        url: 'https://finance.yahoo.com',
-        source: 'Bloomberg',
-        publishedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-        imageUrl: '',
-      },
-    ];
   }
+  return arr;
 };
 
-/**
- * Returns cached price for a single symbol.
- * Called by tradeService before executing a buy/sell to get the current price.
- * If cache is empty (expired or first run), triggers a refresh first.
- */
+// ─── Stock News: Finnhub → FMP → Simulated ───────────────────────────────────
+
+const fetchStockNews = async (symbol) => {
+  const sym = symbol.toUpperCase();
+  const finnhubKey = process.env.FINNHUB_API_KEY;
+  const fmpKey = process.env.FMP_API_KEY;
+
+  // 1. Finnhub company news
+  if (finnhubKey) {
+    try {
+      const toDate = new Date().toISOString().split('T')[0];
+      const fromDateObj = new Date();
+      fromDateObj.setDate(fromDateObj.getDate() - 30);
+      const fromDate = fromDateObj.toISOString().split('T')[0];
+
+      const { data } = await safeGet(
+        `https://finnhub.io/api/v1/company-news?symbol=${sym}&from=${fromDate}&to=${toDate}&token=${finnhubKey}`
+      );
+
+      if (Array.isArray(data) && data.length > 0) {
+        return data.slice(0, 8).map(item => ({
+          id: item.id,
+          headline: item.headline,
+          summary: item.summary || '',
+          source: item.source || 'Finnhub',
+          url: item.url,
+          datetime: item.datetime,
+          image: item.image || '',
+          related: sym,
+        }));
+      }
+    } catch (err) {
+      console.warn(`[priceService] Finnhub stock news failed for ${sym}: ${err.message}`);
+    }
+  }
+
+  // 2. FMP stock news
+  if (fmpKey) {
+    try {
+      const { data } = await safeGet(
+        `${FMP_BASE}/stock_news?tickers=${sym}&limit=8&apikey=${fmpKey}`
+      );
+
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map(item => ({
+          id: item.url,
+          headline: item.title,
+          summary: item.text?.substring(0, 200) || '',
+          source: item.site || 'FMP News',
+          url: item.url,
+          datetime: new Date(item.publishedDate).getTime() / 1000,
+          image: item.image || '',
+          related: sym,
+        }));
+      }
+    } catch (err) {
+      console.warn(`[priceService] FMP stock news failed for ${sym}: ${err.message}`);
+    }
+  }
+
+  // 3. Simulated fallback
+  return [
+    {
+      id: `${sym}-sim-1`,
+      headline: `${sym} Shows Strong Market Resilience Amid Sector Shifts`,
+      summary: `Analysts discuss the future trajectory of ${sym} and its strategic positioning.`,
+      url: 'https://finance.yahoo.com',
+      source: 'MarketWatch',
+      datetime: Math.floor(Date.now() / 1000) - 3600,
+      image: '',
+      related: sym,
+    },
+    {
+      id: `${sym}-sim-2`,
+      headline: `Why Investors Are Focusing on ${sym} This Quarter`,
+      summary: `A detailed breakdown of key performance indicators and growth vectors for ${sym}.`,
+      url: 'https://finance.yahoo.com',
+      source: 'Bloomberg',
+      datetime: Math.floor(Date.now() / 1000) - 18000,
+      image: '',
+      related: sym,
+    },
+  ];
+};
+
+// ─── Cached Price Accessors ───────────────────────────────────────────────────
+
 const getCachedPrice = async (symbol) => {
   let cached = await PriceCache.findOne({ symbol: symbol.toUpperCase() });
-
   if (!cached) {
-    // Cache miss — fetch fresh prices for all symbols, then retry
     await refreshAllPrices();
     cached = await PriceCache.findOne({ symbol: symbol.toUpperCase() });
   }
-
   if (!cached) throw new Error(`Price not available for ${symbol}`);
   return cached;
 };
 
-/**
- * Returns all cached prices — used by the Market page list endpoint.
- */
 const getAllCachedPrices = async () => {
   let cached = await PriceCache.find({}).lean();
   if (cached.length === 0) {
@@ -331,17 +587,6 @@ const getAllCachedPrices = async () => {
     cached = await PriceCache.find({}).lean();
   }
   return cached;
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const formatDate = (d) => d.toISOString().split('T')[0];   // 'YYYY-MM-DD'
-
-const formatMarketCap = (num) => {
-  if (num >= 1e12) return `$${(num / 1e12).toFixed(1)}T`;
-  if (num >= 1e9)  return `$${(num / 1e9).toFixed(1)}B`;
-  if (num >= 1e6)  return `$${(num / 1e6).toFixed(1)}M`;
-  return `$${num}`;
 };
 
 module.exports = {
