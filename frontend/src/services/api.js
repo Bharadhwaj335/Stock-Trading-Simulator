@@ -59,15 +59,16 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
 
-      const { refreshToken, setAuth, user } = useAuthStore.getState();
+      const { setAuth, user } = useAuthStore.getState();
       try {
         const { data } = await axios.post(
           `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/refresh`,
-          { refreshToken }
+          {},
+          { withCredentials: true }
         );
         const newToken = data.accessToken;
         api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-        setAuth(user, newToken, data.refreshToken);
+        setAuth(user, newToken, null);
         processQueue(null, newToken);
         original.headers['Authorization'] = `Bearer ${newToken}`;
         return api(original);
@@ -138,6 +139,7 @@ export const alertService = {
   create: (data) =>
     api.post('/alerts', data),
   getAll:  (status) => api.get('/alerts', { params: { status } }),
+  update:  (id, data) => api.patch(`/alerts/${id}`, data),
   delete:  (id) => api.delete(`/alerts/${id}`),
 };
 

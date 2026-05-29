@@ -67,6 +67,30 @@ router.patch('/me', async (req, res, next) => {
     const allowed = ['username', 'avatar', 'isPublic', 'bio', 'theme', 'notifyEmail', 'notifyInApp'];
     const updates = {};
     for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key];
+
+    // Alphanumeric username validation and sanitization
+    if (updates.username !== undefined) {
+      const cleanUsername = updates.username.toString().trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+        return res.status(400).json({ success: false, message: 'Username must be alphanumeric, using underscores, and between 3-20 characters' });
+      }
+      updates.username = cleanUsername;
+    }
+
+    // Avatar link validation to prevent XSS / malicious injection
+    if (updates.avatar) {
+      const avatarUrl = updates.avatar.toString().trim();
+      if (!/^https?:\/\/.+/i.test(avatarUrl)) {
+        return res.status(400).json({ success: false, message: 'Invalid avatar image URL. Must be a secure HTTP or HTTPS link' });
+      }
+      updates.avatar = avatarUrl;
+    }
+
+    // Bio sanitization
+    if (updates.bio !== undefined) {
+      updates.bio = updates.bio.toString().substring(0, 160).replace(/[<>]/g, ''); // strip HTML tags
+    }
+
     const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true, runValidators: true })
       .select('-refreshToken');
     res.json(user);

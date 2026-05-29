@@ -48,9 +48,10 @@ const getAllStocks = async (req, res) => {
     const startIndex = (Number(page) - 1) * Number(limit);
     const paginated  = stocks.slice(startIndex, startIndex + Number(limit));
 
-    // Enrich with currentPrice for frontend schema compatibility
+    // Enrich with currentPrice and name for frontend schema compatibility
     const enriched = paginated.map((s) => ({
       ...s,
+      name: s.companyName,
       currentPrice: s.price,
     }));
 

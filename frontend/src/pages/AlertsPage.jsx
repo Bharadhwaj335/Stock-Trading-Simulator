@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { 
-  Bell, BellOff, Trash2, CheckCircle2, 
+  Bell, BellOff, Trash2, CheckCircle2, Edit2,
   AlertTriangle, Plus, Search, RefreshCw, X,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Sparkles, Activity
 } from 'lucide-react';
@@ -13,6 +13,7 @@ export default function AlertsPage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState('ACTIVE');
   const [createModal, setCreateModal] = useState(false);
+  const [editingAlert, setEditingAlert] = useState(null);
   const [livePrices, setLivePrices] = useState({});
   
   // Create Form State
@@ -59,6 +60,7 @@ export default function AlertsPage() {
       onSuccess: () => {
         toast.success('Price alert created successfully!');
         setCreateModal(false);
+        setEditingAlert(null);
         // Clear form
         setSymbol('');
         setTargetPrice('');
@@ -68,6 +70,26 @@ export default function AlertsPage() {
       },
       onError: (err) => {
         toast.error(err.response?.data?.message || 'Failed to create alert');
+      }
+    }
+  );
+
+  const updateMutation = useMutation(
+    ({ id, data }) => alertService.update(id, data),
+    {
+      onSuccess: () => {
+        toast.success('Price alert updated successfully!');
+        setCreateModal(false);
+        setEditingAlert(null);
+        // Clear form
+        setSymbol('');
+        setTargetPrice('');
+        setCondition('ABOVE');
+        setNotifyEmail(false);
+        qc.invalidateQueries(['alerts', activeTab]);
+      },
+      onError: (err) => {
+        toast.error(err.response?.data?.message || 'Failed to update alert');
       }
     }
   );
@@ -91,12 +113,21 @@ export default function AlertsPage() {
       toast.error('Please fill in all fields');
       return;
     }
-    createMutation.mutate({
+    const payload = {
       symbol: symbol.toUpperCase(),
       condition,
       targetPrice: parseFloat(targetPrice),
       notifyEmail
-    });
+    };
+
+    if (editingAlert) {
+      updateMutation.mutate({
+        id: editingAlert._id,
+        data: payload
+      });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   return (
@@ -122,7 +153,14 @@ export default function AlertsPage() {
             Sync Feeds
           </button>
           <button 
-            onClick={() => setCreateModal(true)}
+            onClick={() => {
+              setEditingAlert(null);
+              setSymbol('');
+              setCondition('ABOVE');
+              setTargetPrice('');
+              setNotifyEmail(false);
+              setCreateModal(true);
+            }}
             className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 px-4 py-2 rounded-xl transition text-xs font-extrabold shadow-lg shadow-emerald-500/10"
           >
             <Plus size={14} />
@@ -181,7 +219,14 @@ export default function AlertsPage() {
           </p>
           {activeTab === 'ACTIVE' && (
             <button 
-              onClick={() => setCreateModal(true)}
+              onClick={() => {
+                setEditingAlert(null);
+                setSymbol('');
+                setCondition('ABOVE');
+                setTargetPrice('');
+                setNotifyEmail(false);
+                setCreateModal(true);
+              }}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2.5 rounded-xl transition text-xs shadow-lg shadow-emerald-500/10"
             >
               Deploy First Trigger
@@ -320,14 +365,32 @@ export default function AlertsPage() {
                     )}
                   </div>
                   
-                  <button
-                    onClick={() => deleteMutation.mutate(a._id)}
-                    disabled={deleteMutation.isLoading}
-                    className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition"
-                    title="Delete Alert"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {!isTriggered && (
+                      <button
+                        onClick={() => {
+                          setSymbol(a.symbol);
+                          setCondition(a.condition);
+                          setTargetPrice(a.targetPrice.toString());
+                          setNotifyEmail(!!a.notifyEmail);
+                          setEditingAlert(a);
+                          setCreateModal(true);
+                        }}
+                        className="p-1.5 text-slate-650 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-xl transition"
+                        title="Edit Alert"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteMutation.mutate(a._id)}
+                      disabled={deleteMutation.isLoading}
+                      className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition"
+                      title="Delete Alert"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -342,7 +405,7 @@ export default function AlertsPage() {
             <div className="p-5 border-b border-slate-950 flex items-center justify-between bg-slate-950/40">
               <h3 className="font-black text-slate-200 text-sm tracking-wide uppercase flex items-center gap-1.5">
                 <Sparkles size={14} className="text-emerald-400" />
-                Deploy Price Trigger
+                {editingAlert ? 'Edit Price Trigger' : 'Deploy Price Trigger'}
               </h3>
               <button 
                 onClick={() => setCreateModal(false)}
@@ -360,7 +423,8 @@ export default function AlertsPage() {
                   placeholder="e.g. AAPL, TSLA, MSFT"
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-950 rounded-xl px-4 py-2.5 text-slate-200 mt-1.5 focus:outline-none focus:border-emerald-500/80 text-xs uppercase font-extrabold placeholder-slate-700 tracking-wider"
+                  disabled={!!editingAlert}
+                  className="w-full bg-slate-950 border border-slate-950 rounded-xl px-4 py-2.5 text-slate-200 mt-1.5 focus:outline-none focus:border-emerald-500/80 text-xs uppercase font-extrabold placeholder-slate-700 tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -411,7 +475,7 @@ export default function AlertsPage() {
                   id="notifyEmail"
                   checked={notifyEmail}
                   onChange={(e) => setNotifyEmail(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-950 focus:ring-0 focus:ring-offset-0"
+                  className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-950 focus:ring-0 focus:ring-offset-0 cursor-pointer"
                 />
                 <label htmlFor="notifyEmail" className="text-[10px] font-extrabold text-slate-400 select-none cursor-pointer">
                   Deploy email notification when breached
@@ -428,10 +492,14 @@ export default function AlertsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createMutation.isLoading}
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
                   className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-50 text-slate-950 rounded-xl text-xs font-extrabold transition shadow-lg shadow-emerald-500/10"
                 >
-                  {createMutation.isLoading ? 'Deploying...' : 'Deploy Monitor'}
+                  {createMutation.isLoading || updateMutation.isLoading 
+                    ? 'Processing...' 
+                    : editingAlert 
+                      ? 'Update Monitor' 
+                      : 'Deploy Monitor'}
                 </button>
               </div>
             </form>

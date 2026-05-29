@@ -87,6 +87,15 @@ app.use('/api', rateLimit({
   message: 'Too many requests, please slow down.',
 }));
 
+// Auth-specific rate limiter
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 15,
+  message: 'Too many authentication attempts, please try again after 15 minutes.'
+});
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/login', authLimiter);
+
 // ── Routes ──
 app.use('/api/auth',        authRoutes);
 app.use('/api/users',       userRoutes);

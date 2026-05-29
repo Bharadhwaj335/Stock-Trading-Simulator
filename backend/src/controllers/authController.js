@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
+const { setCookie, clearCookie, parseCookies } = require('../utils/cookies');
 
 const signAccess = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '15m' });
@@ -32,6 +33,13 @@ const register = async (req, res, next) => {
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
+    setCookie(res, 'refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.status(201).json({
       accessToken,
       refreshToken,
@@ -52,6 +60,13 @@ const login = async (req, res, next) => {
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
+    setCookie(res, 'refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.json({
       accessToken,
       refreshToken,
@@ -62,7 +77,8 @@ const login = async (req, res, next) => {
 
 const refresh = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    const cookies = parseCookies(req);
+    const refreshToken = req.body.refreshToken || cookies.refreshToken;
     if (!refreshToken) throw new ApiError(400, 'Refresh token required');
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
@@ -75,16 +91,25 @@ const refresh = async (req, res, next) => {
     user.refreshToken = newRefreshToken;
     await user.save({ validateBeforeSave: false });
 
+    setCookie(res, 'refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.json({ accessToken, refreshToken: newRefreshToken });
   } catch (err) { next(err); }
 };
 
 const logout = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    const cookies = parseCookies(req);
+    const refreshToken = req.body.refreshToken || cookies.refreshToken;
     if (refreshToken) {
       await User.findOneAndUpdate({ refreshToken }, { refreshToken: undefined });
     }
+    clearCookie(res, 'refreshToken');
     res.json({ message: 'Logged out' });
   } catch (err) { next(err); }
 };
@@ -195,6 +220,13 @@ const googleCallback = async (req, res, next) => {
     const localRefreshToken = signRefresh(user._id.toString());
     user.refreshToken = localRefreshToken;
     await user.save({ validateBeforeSave: false });
+
+    setCookie(res, 'refreshToken', localRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
 
     console.log(`[auth] Google login success: ${email}`);
     res.redirect(`${frontendURL}/login?token=${localAccessToken}&refreshToken=${localRefreshToken}`);
@@ -310,6 +342,13 @@ const githubCallback = async (req, res, next) => {
     user.refreshToken = localRefreshToken;
     await user.save({ validateBeforeSave: false });
 
+    setCookie(res, 'refreshToken', localRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     const isFallback = (code === 'mock_sandbox_github_auth' || !clientID || clientID.includes('your_github') || clientID.trim() === '') ? 'true' : 'false';
     res.redirect(`${frontendURL}/login?token=${localAccessToken}&refreshToken=${localRefreshToken}&sso_fallback=${isFallback}`);
   } catch (err) {
@@ -347,6 +386,13 @@ const githubCallback = async (req, res, next) => {
       const localRefreshToken = signRefresh(user._id.toString());
       user.refreshToken = localRefreshToken;
       await user.save({ validateBeforeSave: false });
+
+      setCookie(res, 'refreshToken', localRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
 
       res.redirect(`${frontendURL}/login?token=${localAccessToken}&refreshToken=${localRefreshToken}&sso_fallback=true`);
     } catch (fallbackErr) {

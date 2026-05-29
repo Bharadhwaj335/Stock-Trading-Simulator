@@ -177,3 +177,48 @@
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* ─── Cyberpunk Theme Overrides ─── */
+
+/* Sunset theme custom variables */
+html.theme-sunset .text-emerald-400 {
+  color: #f43f5e !important; /* rose-400 */
+}
+html.theme-sunset .bg-emerald-500 {
+  background-color: #ec4899 !important; /* pink-500 */
+}
+html.theme-sunset .from-emerald-500 {
+  --tw-gradient-from: #f43f5e !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ec4899 !important;
+}
+html.theme-sunset .bg-mesh-cyber::before {
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(244, 63, 94, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(245, 158, 11, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.04) 0%, transparent 50%) !important;
+}
+html.theme-sunset .text-emerald-500 {
+  color: #f43f5e !important;
+}
+
+/* Ocean theme custom variables */
+html.theme-ocean .text-emerald-400 {
+  color: #38bdf8 !important; /* sky-400 */
+}
+html.theme-ocean .bg-emerald-500 {
+  background-color: #3b82f6 !important; /* blue-500 */
+}
+html.theme-ocean .from-emerald-500 {
+  --tw-gradient-from: #0284c7 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #3b82f6 !important;
+}
+html.theme-ocean .bg-mesh-cyber::before {
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.04) 0%, transparent 50%) !important;
+}
+html.theme-ocean .text-emerald-500 {
+  color: #38bdf8 !important;
+}
+

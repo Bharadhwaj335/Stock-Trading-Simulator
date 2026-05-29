@@ -66,7 +66,9 @@ export default function MarketPage() {
   const filtered = stocks
     .filter((s) =>
       (sector === 'All' || s.sector === sector) &&
-      (search === '' || s.symbol.toLowerCase().includes(search.toLowerCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
+      (search === '' || 
+        s.symbol.toLowerCase().includes(search.toLowerCase()) || 
+        (s.companyName || s.name || '').toLowerCase().includes(search.toLowerCase()))
     )
     .sort((a, b) => b[sort] - a[sort]);
 
@@ -177,7 +179,7 @@ export default function MarketPage() {
                         {s.symbol}
                       </Link>
                     </td>
-                    <td className="py-4 px-6 font-bold text-slate-400 truncate max-w-[200px]">{s.name}</td>
+                    <td className="py-4 px-6 font-bold text-slate-400 truncate max-w-[200px]">{s.companyName || s.name}</td>
                     <td className="py-4 px-6 text-right font-mono-numbers font-extrabold text-slate-200">
                       ${price?.toFixed(2)}
                     </td>

@@ -35,6 +35,19 @@ export default function AppLayout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
 
+  // Apply user color theme selection globally on mount/update
+  useEffect(() => {
+    if (user?.theme) {
+      const root = document.documentElement;
+      root.classList.remove('theme-sunset', 'theme-ocean');
+      if (user.theme === 'Neon Sunset') {
+        root.classList.add('theme-sunset');
+      } else if (user.theme === 'Ocean Slate') {
+        root.classList.add('theme-ocean');
+      }
+    }
+  }, [user?.theme]);
+
   // Check market open hours (NYSE EST Mon-Fri 9:30am - 4:00pm)
   useEffect(() => {
     const checkMarket = () => {
@@ -145,9 +158,7 @@ export default function AppLayout() {
         {/* Sidebar Header / Logo */}
         <div className={`p-6 border-b border-slate-900/60 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-tr from-emerald-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <TrendingUp size={16} className="text-white" />
-            </div>
+            <img src="/favicon.jpg" alt="StockSim Logo" className="w-8 h-8 rounded-xl object-cover shadow-lg shadow-emerald-500/20" />
             {!isCollapsed && (
               <span className="text-md font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent tracking-tight">
                 StockSim

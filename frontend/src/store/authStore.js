@@ -32,7 +32,7 @@ export const useAuthStore = create(
     }),
     {
       name: 'auth-storage',
-      partialize: state => ({ user: state.user, accessToken: state.accessToken, refreshToken: state.refreshToken }),
+      partialize: state => ({ user: state.user, accessToken: state.accessToken }),
       onRehydrateStorage: () => (state) => {
         if (state?.accessToken) {
           api.defaults.headers.common['Authorization'] = `Bearer ${state.accessToken}`;

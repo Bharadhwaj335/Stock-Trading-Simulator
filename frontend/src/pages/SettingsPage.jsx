@@ -23,8 +23,20 @@ export default function SettingsPage() {
   const [avatar, setAvatar] = useState('');
   const [bio, setBio] = useState('');
   const [isPublic, setIsPublic] = useState(true);
+  const [theme, setTheme] = useState('Cyber Slate');
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [notifyInApp, setNotifyInApp] = useState(true);
+
+  // Theme application helper
+  const applyTheme = (themeName) => {
+    const root = document.documentElement;
+    root.classList.remove('theme-sunset', 'theme-ocean');
+    if (themeName === 'Neon Sunset') {
+      root.classList.add('theme-sunset');
+    } else if (themeName === 'Ocean Slate') {
+      root.classList.add('theme-ocean');
+    }
+  };
 
   // Password states
   const [currentPw, setCurrentPw] = useState('');
@@ -53,8 +65,10 @@ export default function SettingsPage() {
         setAvatar(data.avatar || '');
         setBio(data.bio || '');
         setIsPublic(data.isPublic ?? true);
+        setTheme(data.theme || 'Cyber Slate');
         setNotifyEmail(data.notifyEmail ?? false);
         setNotifyInApp(data.notifyInApp ?? true);
+        applyTheme(data.theme || 'Cyber Slate');
       }
     }
   );
@@ -65,8 +79,10 @@ export default function SettingsPage() {
       setAvatar(profile.avatar || '');
       setBio(profile.bio || '');
       setIsPublic(profile.isPublic ?? true);
+      setTheme(profile.theme || 'Cyber Slate');
       setNotifyEmail(profile.notifyEmail ?? false);
       setNotifyInApp(profile.notifyInApp ?? true);
+      applyTheme(profile.theme || 'Cyber Slate');
     }
   }, [profile]);
 
@@ -81,9 +97,11 @@ export default function SettingsPage() {
           avatar: res.data.avatar,
           bio: res.data.bio,
           isPublic: res.data.isPublic,
+          theme: res.data.theme,
           notifyEmail: res.data.notifyEmail,
           notifyInApp: res.data.notifyInApp
         });
+        applyTheme(res.data.theme || 'Cyber Slate');
         qc.invalidateQueries('myProfile');
         qc.invalidateQueries('leaderboard');
       },
@@ -104,6 +122,7 @@ export default function SettingsPage() {
       avatar,
       bio: bio.trim(),
       isPublic,
+      theme,
       notifyEmail,
       notifyInApp
     });
@@ -298,6 +317,43 @@ export default function SettingsPage() {
                     }`}
                   />
                 </button>
+              </div>
+            </div>
+
+            {/* SECTION 2.5: Theme Selection */}
+            <div className="glass-card rounded-2xl border-slate-900 p-6 space-y-6 shadow-xl">
+              <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2 pb-3 border-b border-slate-900/60">
+                <span className="text-emerald-400">🎨</span>
+                Terminal Interface Themes
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { name: 'Cyber Slate', desc: 'Sleek neon emerald tech look', class: 'border-emerald-500/20 text-emerald-400 bg-slate-950/40 hover:border-emerald-450/50' },
+                  { name: 'Neon Sunset', desc: 'Vibrant hot pink sunset vibe', class: 'border-pink-500/20 text-pink-450 text-pink-400 bg-pink-950/10 hover:border-pink-500/50' },
+                  { name: 'Ocean Slate', desc: 'Calming marine blue highlights', class: 'border-sky-500/20 text-sky-400 bg-sky-950/10 hover:border-sky-400/50' }
+                ].map(t => {
+                  const isSelected = theme === t.name;
+                  return (
+                    <button
+                      key={t.name}
+                      type="button"
+                      onClick={() => {
+                        setTheme(t.name);
+                        applyTheme(t.name);
+                      }}
+                      className={`p-4 border rounded-xl flex flex-col text-left justify-between h-24 transition-all duration-300 ${t.class} ${
+                        isSelected ? 'border-current scale-[1.02] shadow shadow-emerald-500/5 font-bold' : 'opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center w-full">
+                        <span className="text-xs font-black">{t.name}</span>
+                        {isSelected && <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono tracking-wider">Active</span>}
+                      </div>
+                      <span className="text-[9px] text-slate-500 font-semibold leading-normal">{t.desc}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

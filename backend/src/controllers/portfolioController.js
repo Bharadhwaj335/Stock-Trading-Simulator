@@ -91,6 +91,9 @@ const resetPortfolio = async (req, res, next) => {
       await cache.del(`leaderboard:${i}:20`);
     }
 
+    const { emitToUser } = require('../socket');
+    emitToUser(userId, 'walletUpdate', { walletBalance: STARTING_BALANCE });
+
     return res.json({
       success: true,
       message: 'Portfolio reset successfully',

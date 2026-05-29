@@ -118,6 +118,9 @@ const executeTradeLogic = async (userId, symbol, type, qty, session = null) => {
   const User = require('../models/User');
   await User.findByIdAndUpdate(userId, { walletBalance: wallet.balance }, sessionOpt);
 
+  const { emitToUser } = require('../socket');
+  emitToUser(userId, 'walletUpdate', { walletBalance: wallet.balance });
+
   // Check and award badges asynchronously
   const badgeService = require('./badgeService');
   badgeService.checkAndAwardBadges(userId).catch(err => {

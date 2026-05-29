@@ -116,22 +116,28 @@ const followUser = async (req, res, next) => {
     if (targetId === myId) return res.status(400).json({ message: "Can't follow yourself" });
 
     const [me, target] = await Promise.all([
-      User.findById(myId),
-      User.findById(targetId),
+      User.findById(myId).lean(),
+      User.findById(targetId).lean(),
     ]);
     if (!me || !target) return res.status(404).json({ message: 'User not found' });
 
     const alreadyFollowing = me.following.map(String).includes(targetId);
     if (alreadyFollowing) {
-      me.following = me.following.filter(id => id.toString() !== targetId);
-      target.followers = target.followers.filter(id => id.toString() !== myId);
+      await Promise.all([
+        User.updateOne({ _id: myId }, { $pull: { following: targetId } }),
+        User.updateOne({ _id: targetId }, { $pull: { followers: myId } }),
+      ]);
     } else {
-      me.following.push(target._id);
-      target.followers.push(me._id);
+      await Promise.all([
+        User.updateOne({ _id: myId }, { $addToSet: { following: targetId } }),
+        User.updateOne({ _id: targetId }, { $addToSet: { followers: myId } }),
+      ]);
     }
-    await Promise.all([me.save(), target.save()]);
 
-    res.json({ following: !alreadyFollowing, followersCount: target.followers.length });
+    const updatedTarget = await User.findById(targetId).select('followers').lean();
+    const followersCount = updatedTarget ? (updatedTarget.followers || []).length : 0;
+
+    res.json({ following: !alreadyFollowing, followersCount });
   } catch (err) { next(err); }
 };
 

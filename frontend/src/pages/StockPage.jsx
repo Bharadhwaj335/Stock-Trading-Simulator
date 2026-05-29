@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { TrendingUp, TrendingDown, Bell, Star, StarOff, AlertCircle } from 'lucide-react';
@@ -27,6 +27,10 @@ export default function StockPage() {
   const [confirmModal, setConfirmModal] = useState(false);
   const [alertTarget, setAlertTarget] = useState('');
   const [alertCond, setAlertCond] = useState('ABOVE');
+  const [alertNotifyEmail, setAlertNotifyEmail] = useState(false);
+
+  // Order book state
+  const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
 
   // 1. Fetch stock basic data
   const { data: stock, isLoading: stockLoading } = useQuery(['stock', symbol], () => stockService.getOne(symbol).then(r => r.data.data));
@@ -63,6 +67,70 @@ export default function StockPage() {
   const total = price * qty;
   const canAfford = tradeType === 'BUY' ? total <= (user?.walletBalance ?? 30000) : true;
   const up = (stock?.changePercent ?? 0) >= 0;
+
+  // Interactive Live Order Book Ticker simulation
+  useEffect(() => {
+    if (!price) return;
+    const generateBook = () => {
+      const spread = parseFloat((price * 0.0004).toFixed(2)) || 0.05;
+      const decimalPlaces = 2;
+      const asks = [];
+      const bids = [];
+
+      for (let i = 1; i <= 5; i++) {
+        const askPrice = price + (spread / 2) + ((i - 1) * 0.03);
+        const bidPrice = price - (spread / 2) - ((i - 1) * 0.03);
+        asks.unshift({
+          price: parseFloat(askPrice.toFixed(decimalPlaces)),
+          size: Math.floor(Math.random() * 450) + 50,
+          total: 0
+        });
+        bids.push({
+          price: parseFloat(bidPrice.toFixed(decimalPlaces)),
+          size: Math.floor(Math.random() * 450) + 50,
+          total: 0
+        });
+      }
+
+      let askTotal = 0;
+      for (let i = asks.length - 1; i >= 0; i--) {
+        askTotal += asks[i].size;
+        asks[i].total = askTotal;
+      }
+      let bidTotal = 0;
+      for (let i = 0; i < bids.length; i++) {
+        bidTotal += bids[i].size;
+        bids[i].total = bidTotal;
+      }
+      setOrderBook({ bids, asks });
+    };
+
+    generateBook();
+    const timer = setInterval(() => {
+      setOrderBook(prev => {
+        const randomize = (levels) => levels.map(l => ({
+          ...l,
+          size: Math.max(10, l.size + Math.floor(Math.random() * 41) - 20)
+        }));
+        const bids = randomize(prev.bids);
+        const asks = randomize(prev.asks);
+
+        let askTotal = 0;
+        for (let i = asks.length - 1; i >= 0; i--) {
+          askTotal += asks[i].size;
+          asks[i].total = askTotal;
+        }
+        let bidTotal = 0;
+        for (let i = 0; i < bids.length; i++) {
+          bidTotal += bids[i].size;
+          bids[i].total = bidTotal;
+        }
+        return { bids, asks };
+      });
+    }, 1500);
+
+    return () => clearInterval(timer);
+  }, [price]);
 
   // Watchlist favorite/unfavorite triggers
   const watchMutation = useMutation(
@@ -103,12 +171,14 @@ export default function StockPage() {
 
   // Alert creation mutation
   const alertMutation = useMutation(
-    () => alertService.create({ symbol, condition: alertCond, targetPrice: parseFloat(alertTarget), notifyEmail: false }),
+    () => alertService.create({ symbol, condition: alertCond, targetPrice: parseFloat(alertTarget), notifyEmail: !!alertNotifyEmail }),
     { 
       onSuccess: () => { 
         toast.success('Price alert has been established'); 
         setAlertModal(false); 
         setAlertTarget('');
+        setAlertNotifyEmail(false);
+        qc.invalidateQueries(['alerts', 'ACTIVE']);
       },
       onError: () => toast.error('Failed to create alert')
     }
@@ -183,35 +253,102 @@ export default function StockPage() {
 
       {/* Main trading screen grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Interactive Chart widget */}
-        <div className="xl:col-span-2 glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-6 shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-900/50 pb-4">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Historical Valuations</h3>
+        {/* Left Column: Interactive Chart and Live Level 2 Depth */}
+        <div className="xl:col-span-2 space-y-6">
+          {/* Interactive Chart widget */}
+          <div className="glass-card rounded-2xl border-slate-900 p-6 flex flex-col gap-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-900/50 pb-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Historical Valuations</h3>
+              
+              <div className="flex bg-slate-950 border border-slate-900 rounded-xl p-0.5">
+                {RANGES.map(r => {
+                  const isActive = range === r;
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => setRange(r)}
+                      className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-colors ${
+                        isActive ? 'bg-slate-900 text-emerald-400 font-black' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             
-            <div className="flex bg-slate-950 border border-slate-900 rounded-xl p-0.5">
-              {RANGES.map(r => {
-                const isActive = range === r;
-                return (
-                  <button
-                    key={r}
-                    onClick={() => setRange(r)}
-                    className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-colors ${
-                      isActive ? 'bg-slate-900 text-emerald-400 font-black' : 'text-slate-500 hover:text-slate-300'
-                    }`}
-                  >
-                    {r}
-                  </button>
-                );
-              })}
+            <div className="w-full">
+              {stockLoading ? (
+                <Skeleton className="h-72 w-full animate-pulse" />
+              ) : (
+                <StockChart data={history} />
+              )}
             </div>
           </div>
-          
-          <div className="w-full">
-            {stockLoading ? (
-              <Skeleton className="h-72 w-full animate-pulse" />
-            ) : (
-              <StockChart data={history} />
-            )}
+
+          {/* Live Order Book & Spread Card */}
+          <div className="glass-card rounded-2xl border-slate-900 p-6 shadow-xl space-y-4">
+            <div>
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Live Order Book & Depth</h3>
+              <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5 tracking-wider">Level 2 market depth updating in real-time</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+              {/* Asks (Sells) Table */}
+              <div className="space-y-1">
+                <div className="grid grid-cols-3 text-[9px] font-extrabold uppercase tracking-wider text-slate-500 pb-1.5 border-b border-slate-900/50">
+                  <span>Ask Price ($)</span>
+                  <span className="text-right">Size (Qty)</span>
+                  <span className="text-right">Total depth</span>
+                </div>
+                <div className="divide-y divide-slate-900/20 font-mono-numbers">
+                  {orderBook.asks?.map((ask, i) => (
+                    <div key={i} className="grid grid-cols-3 py-1.5 hover:bg-slate-900/20 rounded px-1 transition relative overflow-hidden group">
+                      <div className="absolute right-0 top-0 bottom-0 bg-red-500/5 transition-all duration-500 pointer-events-none" style={{ width: `${Math.min(100, (ask.total / 1800) * 100)}%` }} />
+                      <span className="text-red-400 font-bold z-10">${ask.price.toFixed(2)}</span>
+                      <span className="text-right text-slate-400 font-medium z-10">{ask.size}</span>
+                      <span className="text-right text-slate-500 font-semibold z-10">{ask.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bids (Buys) Table */}
+              <div className="space-y-1">
+                <div className="grid grid-cols-3 text-[9px] font-extrabold uppercase tracking-wider text-slate-500 pb-1.5 border-b border-slate-900/50">
+                  <span>Bid Price ($)</span>
+                  <span className="text-right">Size (Qty)</span>
+                  <span className="text-right">Total depth</span>
+                </div>
+                <div className="divide-y divide-slate-900/20 font-mono-numbers">
+                  {orderBook.bids?.map((bid, i) => (
+                    <div key={i} className="grid grid-cols-3 py-1.5 hover:bg-slate-900/20 rounded px-1 transition relative overflow-hidden group">
+                      <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/5 transition-all duration-500 pointer-events-none" style={{ width: `${Math.min(100, (bid.total / 1800) * 100)}%` }} />
+                      <span className="text-emerald-400 font-bold z-10">${bid.price.toFixed(2)}</span>
+                      <span className="text-right text-slate-400 font-medium z-10">{bid.size}</span>
+                      <span className="text-right text-slate-500 font-semibold z-10">{bid.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Spread display footer bar */}
+            <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 flex justify-between items-center text-[10px] uppercase font-bold text-slate-500">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                <span>Simulated Spread:</span>
+                <span className="text-slate-300 font-mono-numbers font-black ml-0.5">
+                  ${orderBook.asks && orderBook.bids && orderBook.asks.length > 0 && orderBook.bids.length > 0 
+                    ? (orderBook.asks[orderBook.asks.length - 1].price - orderBook.bids[0].price).toFixed(2) 
+                    : '0.05'}
+                </span>
+              </div>
+              <div className="font-mono-numbers text-[9px]">
+                Liquidity Pool Depth: <span className="text-emerald-400">{orderBook.asks?.reduce((a, b) => a + b.size, 0) + orderBook.bids?.reduce((a, b) => a + b.size, 0) || '2,400'} shares</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -318,6 +455,65 @@ export default function StockPage() {
             <div className="mt-5 pt-4 border-t border-slate-900 text-[10px] text-slate-500 font-bold uppercase tracking-wider flex justify-between">
               <span>Cash Capital Available</span>
               <span className="text-slate-300 font-mono-numbers">${user?.walletBalance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          {/* Quick Alert Deployment panel */}
+          <div className="glass-card rounded-2xl border-slate-900 p-5 space-y-4 shadow-xl relative overflow-hidden group">
+            <h3 className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 border-b border-slate-900/60 pb-2 flex items-center gap-1.5">
+              <Bell size={12} className="text-emerald-400" />
+              Deploy Quick Target Alert
+            </h3>
+            
+            <div className="flex bg-slate-950 border border-slate-900 rounded-xl p-0.5">
+              {(['ABOVE', 'BELOW']).map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setAlertCond(c)}
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-extrabold transition-colors ${
+                    alertCond === c ? 'bg-slate-900 text-emerald-400 font-black' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {c === 'ABOVE' ? 'Ticking Above' : 'Ticking Below'}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3.5">
+              <div>
+                <label className="text-[8px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5 block">Target Price ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={alertTarget}
+                  onChange={e => setAlertTarget(e.target.value)}
+                  placeholder={`Target (current: $${price?.toFixed(2)})`}
+                  className="w-full bg-slate-950 border border-slate-900 focus:border-emerald-500/50 rounded-xl px-3 py-2 text-slate-200 text-xs font-semibold focus:outline-none placeholder-slate-700 font-mono-numbers"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="directAlertNotifyEmail"
+                  checked={alertNotifyEmail}
+                  onChange={e => setAlertNotifyEmail(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-950 border-slate-900 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <label htmlFor="directAlertNotifyEmail" className="text-[9px] font-extrabold text-slate-400 select-none cursor-pointer">
+                  Deploy email notification upon breach
+                </label>
+              </div>
+
+              <button
+                onClick={() => alertMutation.mutate()}
+                disabled={!alertTarget || alertMutation.isLoading}
+                className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold rounded-xl text-xs transition duration-300 shadow-md shadow-emerald-500/10 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                {alertMutation.isLoading ? 'Deploying...' : 'Deploy Target Monitor'}
+              </button>
             </div>
           </div>
 

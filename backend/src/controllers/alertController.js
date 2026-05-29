@@ -37,8 +37,31 @@ const deleteAlert = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const updateAlert = async (req, res, next) => {
+  try {
+    const { condition, targetPrice, notifyEmail } = req.body;
+    let cond = condition ? condition.toString().toUpperCase() : undefined;
+    if (cond && cond.includes('ABOVE')) cond = 'ABOVE';
+    else if (cond && cond.includes('BELOW')) cond = 'BELOW';
+
+    const updates = { status: 'ACTIVE' }; // Always reset edited alerts to ACTIVE
+    if (cond) updates.condition = cond;
+    if (targetPrice !== undefined) updates.targetPrice = Number(targetPrice);
+    if (notifyEmail !== undefined) updates.notifyEmail = !!notifyEmail;
+
+    const alert = await Alert.findOneAndUpdate(
+      { _id: req.params.id, user: req.user.id },
+      updates,
+      { new: true, runValidators: true }
+    );
+    if (!alert) return res.status(404).json({ message: 'Alert not found' });
+    res.json(alert);
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   createAlert,
   getAlerts,
   deleteAlert,
+  updateAlert,
 };

@@ -24,7 +24,7 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showSandbox, setShowSandbox] = useState(false);
+
   const navigate = useNavigate();
   const setAuth  = useAuthStore(s => s.setAuth);
 
@@ -130,9 +130,7 @@ export default function RegisterPage() {
         <div className="glass-card rounded-3xl border-slate-900/60 p-6 md:p-8 shadow-2xl relative overflow-hidden glow-indigo">
           <div className="flex flex-col items-center mb-6">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25 group-hover:scale-105 transition-transform duration-300">
-                <TrendingUp size={18} className="text-white" />
-              </div>
+              <img src="/favicon.jpg" alt="StockSim Logo" className="w-9 h-9 rounded-xl object-cover shadow-lg shadow-emerald-500/25 group-hover:scale-105 transition-transform duration-300" />
               <span className="text-lg font-black bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent tracking-tight">StockSim</span>
             </Link>
             <h1 className="text-xl font-black text-slate-100 mt-4 tracking-tight">Create Account</h1>
@@ -240,73 +238,9 @@ export default function RegisterPage() {
                 </svg>
                 <span>Sign Up with Google</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/github`;
-                }}
-                className="w-full flex items-center justify-center gap-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-200 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow hover:border-slate-700 font-sans"
-              >
-                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                </svg>
-                <span>Sign Up with GitHub</span>
-              </button>
             </div>
 
-            {/* Collapsible Sandbox Console Panel */}
-            <div className="mt-5 border-t border-slate-900/60 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowSandbox(!showSandbox)}
-                className="w-full flex items-center justify-between text-[10px] font-black text-cyan-400 hover:text-cyan-300 uppercase tracking-widest transition-colors focus:outline-none"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Terminal size={12} className="animate-pulse" />
-                  Expand Developer Sandbox Terminal
-                </span>
-                {showSandbox ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
 
-              {showSandbox && (
-                <div className="mt-3 space-y-3 animate-fadeIn text-left bg-slate-950 p-4 border border-cyan-950/40 rounded-2xl glow-cyan">
-                  <p className="text-[9px] text-slate-400 leading-normal font-semibold">
-                    SSO client keys are unconfigured in your local environment. Bypass real OAuth protocols by logging in directly as whitelisted developer profiles:
-                  </p>
-
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/google?mock=true`;
-                      }}
-                      className="flex items-center justify-between bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/30 px-3.5 py-2.5 rounded-xl text-left transition-all group"
-                    >
-                      <div>
-                        <span className="text-[9px] font-black text-slate-200 block">Sign In: Scholar Sandbox</span>
-                        <span className="text-[8px] text-slate-500 font-mono-numbers">sandbox.student@mit.edu</span>
-                      </div>
-                      <Sparkles size={12} className="text-cyan-400 group-hover:scale-110 transition-transform" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/github?mock=true`;
-                      }}
-                      className="flex items-center justify-between bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/30 px-3.5 py-2.5 rounded-xl text-left transition-all group"
-                    >
-                      <div>
-                        <span className="text-[9px] font-black text-slate-200 block">Sign In: Octocat Sandbox</span>
-                        <span className="text-[8px] text-slate-500 font-mono-numbers">sandbox.octocat@gmail.com</span>
-                      </div>
-                      <Sparkles size={12} className="text-cyan-400 group-hover:scale-110 transition-transform" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </form>
 
           <p className="text-center text-slate-400 text-xs font-semibold mt-6">

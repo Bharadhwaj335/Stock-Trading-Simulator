@@ -34,9 +34,7 @@ export default function LandingPage() {
       <header className="sticky top-0 bg-slate-950/80 backdrop-blur-md border-b border-slate-900/60 h-20 w-full z-50 transition-all duration-300">
         <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <div className="w-10 h-10 bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <TrendingUp size={20} className="text-white" />
-            </div>
+            <img src="/favicon.jpg" alt="StockSim Logo" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-emerald-500/30" />
             <span className="text-xl font-black bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent tracking-tight">
               StockSim
             </span>

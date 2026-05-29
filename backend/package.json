@@ -6,6 +6,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed": "node src/scripts/seed.js",
+    "test-email": "node src/scripts/testEmail.js",
     "lint": "eslint src --ext js"
   },
   "dependencies": {
