@@ -51,7 +51,18 @@ export default function PortfolioPage() {
 
   const summary = portfolio?.summary;
   const holdings = portfolio?.holdings || [];
-  const trades = tradesData?.data?.trades || [];
+  let trades = [];
+  if (tradesData) {
+    if (Array.isArray(tradesData.trades)) {
+      trades = tradesData.trades;
+    } else if (Array.isArray(tradesData.data?.trades)) {
+      trades = tradesData.data.trades;
+    } else if (Array.isArray(tradesData.data)) {
+      trades = tradesData.data;
+    } else if (Array.isArray(tradesData)) {
+      trades = tradesData;
+    }
+  }
 
   // 4. Enrich holdings with live WebSocket tick valuations
   let livePortfolioValue = 0;

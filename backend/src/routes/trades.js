@@ -1,9 +1,9 @@
 const express = require('express');
 const router  = express.Router();
 const { createTrade, getTrades } = require('../controllers/trades.controller');
-const { verifyJWT } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth');
 
-router.use(verifyJWT);
+router.use(protect);
 
 // New unified endpoints
 router.post('/', createTrade);   // POST /api/trades

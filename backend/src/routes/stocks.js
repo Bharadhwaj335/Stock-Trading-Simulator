@@ -7,10 +7,10 @@ const {
   getStockHistory,
   getStockNews,
 } = require('../controllers/stocks.controller');
-const { verifyJWT } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth');
 
 // All stock routes require authentication
-router.use(verifyJWT);
+router.use(protect);
 
 router.get('/',              getAllStocks);       // GET /api/stocks
 router.get('/movers',        getMovers);          // GET /api/stocks/movers

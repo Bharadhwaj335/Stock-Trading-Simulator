@@ -4,6 +4,7 @@ import { Settings, User, Shield, Check, RefreshCw, Bell, HelpCircle, Lock, Alert
 import { userService, portfolioService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import Skeleton from '../components/ui/Skeleton';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
@@ -30,11 +31,13 @@ export default function SettingsPage() {
   // Theme application helper
   const applyTheme = (themeName) => {
     const root = document.documentElement;
-    root.classList.remove('theme-sunset', 'theme-ocean');
+    root.classList.remove('theme-sunset', 'theme-ocean', 'theme-light');
     if (themeName === 'Neon Sunset') {
       root.classList.add('theme-sunset');
     } else if (themeName === 'Ocean Slate') {
       root.classList.add('theme-ocean');
+    } else if (themeName === 'Light Slate') {
+      root.classList.add('theme-light');
     }
   };
 
@@ -327,11 +330,12 @@ export default function SettingsPage() {
                 Terminal Interface Themes
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
                   { name: 'Cyber Slate', desc: 'Sleek neon emerald tech look', class: 'border-emerald-500/20 text-emerald-400 bg-slate-950/40 hover:border-emerald-450/50' },
                   { name: 'Neon Sunset', desc: 'Vibrant hot pink sunset vibe', class: 'border-pink-500/20 text-pink-450 text-pink-400 bg-pink-950/10 hover:border-pink-500/50' },
-                  { name: 'Ocean Slate', desc: 'Calming marine blue highlights', class: 'border-sky-500/20 text-sky-400 bg-sky-950/10 hover:border-sky-400/50' }
+                  { name: 'Ocean Slate', desc: 'Calming marine blue highlights', class: 'border-sky-500/20 text-sky-400 bg-sky-950/10 hover:border-sky-400/50' },
+                  { name: 'Light Slate', desc: 'Clean high contrast theme', class: 'border-slate-300 text-slate-700 bg-white hover:border-slate-400' }
                 ].map(t => {
                   const isSelected = theme === t.name;
                   return (
@@ -343,7 +347,7 @@ export default function SettingsPage() {
                         applyTheme(t.name);
                       }}
                       className={`p-4 border rounded-xl flex flex-col text-left justify-between h-24 transition-all duration-300 ${t.class} ${
-                        isSelected ? 'border-current scale-[1.02] shadow shadow-emerald-500/5 font-bold' : 'opacity-70 hover:opacity-100'
+                        isSelected ? 'border-emerald-500 scale-[1.02] shadow shadow-emerald-500/5 font-bold' : 'opacity-70 hover:opacity-100'
                       }`}
                     >
                       <div className="flex justify-between items-center w-full">

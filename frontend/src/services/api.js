@@ -102,7 +102,7 @@ export const stockService = {
 export const tradeService = {
   buy:         (data) => api.post('/trades/buy', data),
   sell:        (data) => api.post('/trades/sell', data),
-  getHistory:  (params) => api.get('/trades/history', { params }),
+  getHistory:  (params) => api.get('/trades/history', { params }).then(r => r.data),
 };
 
 export const portfolioService = {

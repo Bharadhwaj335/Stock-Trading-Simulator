@@ -47,11 +47,16 @@ export default function StockChart({ data }) {
     chart.timeScale().fitContent();
 
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: containerRef.current.clientWidth });
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth });
+      }
     });
     ro.observe(containerRef.current);
 
-    return () => { chart.remove(); ro.disconnect(); };
+    return () => {
+      chart.remove();
+      ro.disconnect();
+    };
   }, [data]);
 
   if (!data.length) {

@@ -39,11 +39,13 @@ export default function AppLayout() {
   useEffect(() => {
     if (user?.theme) {
       const root = document.documentElement;
-      root.classList.remove('theme-sunset', 'theme-ocean');
+      root.classList.remove('theme-sunset', 'theme-ocean', 'theme-light');
       if (user.theme === 'Neon Sunset') {
         root.classList.add('theme-sunset');
       } else if (user.theme === 'Ocean Slate') {
         root.classList.add('theme-ocean');
+      } else if (user.theme === 'Light Slate') {
+        root.classList.add('theme-light');
       }
     }
   }, [user?.theme]);
