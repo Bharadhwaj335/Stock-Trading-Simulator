@@ -10,7 +10,7 @@ An immersive, premium-grade dashboard for virtual stock analysis and paper tradi
 - **State Management**: Zustand
 - **Asynchronous Data Queries**: React Query
 - **Charts Integration**: TradingView Lightweight Charts + Recharts
-- **Production Server**: Nginx
+- **Production Host**: Vercel (supporting client-side SPA routing fallback)
 
 ---
 
@@ -18,8 +18,7 @@ An immersive, premium-grade dashboard for virtual stock analysis and paper tradi
 
 ```text
 frontend/
-├── nginx.conf               # Custom Nginx routing configuration
-├── Dockerfile               # Node builder stage + Nginx serving stage
+├── vercel.json              # Custom Vercel routing fallback configuration
 ├── src/
 │   ├── App.jsx              # Main App shell and route mappings
 │   ├── main.jsx             # App bootstrapper wrapped in global Error Boundary
@@ -34,6 +33,32 @@ frontend/
 │   └── index.css            # Stylesheets, animations, and color overrides
 └── package.json             # Core dependency packages
 ```
+
+---
+
+## 🚀 Running Locally & Commands
+
+To launch the frontend client:
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+2. **Environment Setup**:
+   Create a `.env` file mapping `VITE_API_URL` to your backend API URL (e.g. `http://localhost:5000/api`).
+3. **Scripts**:
+   - Run in Development:
+     ```bash
+     npm run dev
+     ```
+   - Compile for Production:
+     ```bash
+     npm run build
+     ```
+   - Preview local production build:
+     ```bash
+     npm run preview
+     ```
 
 ---
 

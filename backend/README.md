@@ -5,10 +5,9 @@ This microservice acts as the central engine for StockSim, driving user accounts
 ---
 
 ## 🛠️ Technology Stack
-- **Runtime**: Node.js v20 (Docker Alpine image)
+- **Runtime**: Node.js v20
 - **Framework**: Express.js
 - **Database Engine**: Mongoose ODM + MongoDB Atlas Cloud Database
-- **Caching**: Redis
 - **Real-Time Communication**: Socket.io
 - **Mailing Engine**: Nodemailer (integrated with Brevo SMTP relay)
 
@@ -20,7 +19,7 @@ This microservice acts as the central engine for StockSim, driving user accounts
 backend/
 ├── src/
 │   ├── app.js               # Express application initialization
-│   ├── index.js             # Server bootstrapper, CORS, and route registers
+│   ├── index.js             # Server bootstrapper, CORS, proxy settings, and routes
 │   ├── config/              # Redis and Database pool connection configs
 │   ├── controllers/         # Business logic handlers (Auth, Trades, Leaderboards)
 │   ├── middleware/          # JWT protection, request limiters, and error bounds
@@ -29,8 +28,6 @@ backend/
 │   ├── services/            # Core systems (Trade execution, Brevo Mailer)
 │   ├── socket/              # Socket.io connection handlers and price updates
 │   └── utils/               # Native cookie handlers, logger helpers
-├── Dockerfile               # Node runtime configuration
-├── .dockerignore            # Excludes logs and development packages
 └── package.json             # Core system dependencies
 ```
 
@@ -44,7 +41,7 @@ backend/
   username:         { type: String, required: true, unique: true },
   email:            { type: String, required: true, unique: true },
   password:         { type: String, required: true },
-  walletBalance:    { type: Number, default: 30000 },
+  walletBalance:    { type: Number, default: 100000 },
   avatar:           { type: String, default: null },
   bio:              { type: String, default: '' },
   isPublic:         { type: Boolean, default: true },
@@ -82,6 +79,32 @@ backend/
   notifyEmail:  { type: Boolean, default: false }
 }
 ```
+
+---
+
+## 🚀 Running Locally & Commands
+
+To launch the backend API:
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+2. **Environment Setup**:
+   Create a `.env` file based on `.env.example` with your keys.
+3. **Scripts**:
+   - Run in Development (with hot-reloading via Nodemon):
+     ```bash
+     npm run dev
+     ```
+   - Start in Production:
+     ```bash
+     npm start
+     ```
+   - Seed database with mock trading stocks:
+     ```bash
+     npm run seed
+     ```
 
 ---
 
