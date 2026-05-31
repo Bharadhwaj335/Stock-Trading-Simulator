@@ -45,9 +45,36 @@ const envClientOrigins = (process.env.CLIENT_URL || '')
 
 const allowedOrigins = [...new Set([...defaultClientOrigins, ...envClientOrigins])];
 
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || process.env.CLIENT_URL === '*') {
+    return true;
+  }
+  // Allow all Vercel domains containing stock-trading-simulator
+  if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) {
+    if (origin.includes('stock-trading-simulator')) {
+      return true;
+    }
+  }
+  // Allow all localhost origins during development
+  if (/^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
+    return true;
+  }
+  return false;
+};
+
 // ── Socket.io ──
 const io = new Server(httpServer, {
-  cors: { origin: allowedOrigins, credentials: true },
+  cors: {
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  },
 });
 module.exports.io = io;
 
@@ -59,15 +86,25 @@ app.use(compression());
 
 // configure CORS to accept configured client origins (supports comma-separated list)
 logger.info(`Allowed CORS origins: ${allowedOrigins.join(',')}`);
-// Use a simple whitelist array for CORS so the module sets headers correctly
-app.use(cors({ origin: allowedOrigins, credentials: true }));
-// respond to preflight requests for all routes
-app.options('*', cors({ origin: allowedOrigins, credentials: true }));
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Fallback: ensure CORS headers are present for all responses (helps debug browsers)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
