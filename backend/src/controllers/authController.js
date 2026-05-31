@@ -9,6 +9,12 @@ const signAccess = (id) =>
 const signRefresh = (id) =>
   jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' });
 
+const getRedirectURI = (req, path) => {
+  const host = req.get('host') || '';
+  const protocol = (host.includes('localhost') || host.includes('127.0.0.1')) ? req.protocol : 'https';
+  return `${protocol}://${host}${path}`;
+};
+
 const register = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
@@ -117,7 +123,7 @@ const logout = async (req, res, next) => {
 const googleLogin = (req, res) => {
   try {
     const clientID = process.env.GOOGLE_CLIENT_ID;
-    const redirectURI = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+    const redirectURI = getRedirectURI(req, '/api/auth/google/callback');
 
     if (!clientID || clientID.trim() === '') {
       console.warn('[authController] Google Client ID is not set in .env');
@@ -146,7 +152,7 @@ const googleCallback = async (req, res, next) => {
   const code = req.query.code;
   const clientID = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectURI = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+  const redirectURI = getRedirectURI(req, '/api/auth/google/callback');
   const frontendURL = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
 
   if (!code) {
@@ -239,7 +245,7 @@ const googleCallback = async (req, res, next) => {
 const githubLogin = (req, res) => {
   try {
     const clientID = process.env.GITHUB_CLIENT_ID;
-    const redirectURI = `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
+    const redirectURI = getRedirectURI(req, '/api/auth/github/callback');
     
     if (!clientID || clientID.includes('your_github') || clientID.trim() === '') {
       console.warn('[authController] GitHub Client ID is unconfigured. Redirecting to Sandbox GitHub Mock login...');
@@ -258,7 +264,7 @@ const githubCallback = async (req, res, next) => {
   const code = req.query.code;
   const clientID = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
-  const redirectURI = `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
+  const redirectURI = getRedirectURI(req, '/api/auth/github/callback');
   const frontendURL = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
 
   if (!code) {

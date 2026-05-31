@@ -28,6 +28,7 @@ const analyticsRoutes = require('./routes/analytics');
 const newsRoutes = require('./routes/news');
 
 const app = express();
+app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 let isShuttingDown = false;
 
