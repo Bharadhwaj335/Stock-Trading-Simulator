@@ -15,6 +15,37 @@ const getRedirectURI = (req, path) => {
   return `${protocol}://${host}${path}`;
 };
 
+const isOriginAllowed = (origin) => {
+  if (!origin) return false;
+  
+  const defaultClientOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+  ];
+
+  const envClientOrigins = (process.env.CLIENT_URL || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const allowedOrigins = [...new Set([...defaultClientOrigins, ...envClientOrigins])];
+
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || process.env.CLIENT_URL === '*') {
+    return true;
+  }
+  if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) {
+    if (origin.includes('stock-trading-simulator')) {
+      return true;
+    }
+  }
+  if (/^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
+    return true;
+  }
+  return false;
+};
+
 const register = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
@@ -131,6 +162,23 @@ const googleLogin = (req, res) => {
       return res.redirect(`${frontendURL}/login?error=google_not_configured`);
     }
 
+    // Try to get origin from Referer header
+    const referer = req.headers.referer || req.get('referrer');
+    let origin = '';
+    if (referer) {
+      try {
+        const refUrl = new URL(referer);
+        origin = refUrl.origin;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const statePayload = {
+      origin: isOriginAllowed(origin) ? origin : ''
+    };
+    const stateStr = Buffer.from(JSON.stringify(statePayload)).toString('base64');
+
     const params = new URLSearchParams({
       client_id: clientID,
       redirect_uri: redirectURI,
@@ -138,6 +186,7 @@ const googleLogin = (req, res) => {
       scope: 'email profile',
       access_type: 'offline',
       prompt: 'select_account',
+      state: stateStr,
     });
 
     res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
@@ -150,10 +199,23 @@ const googleLogin = (req, res) => {
 
 const googleCallback = async (req, res, next) => {
   const code = req.query.code;
+  const stateStr = req.query.state;
   const clientID = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectURI = getRedirectURI(req, '/api/auth/google/callback');
-  const frontendURL = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
+  
+  let targetOrigin = '';
+  if (stateStr) {
+    try {
+      const decoded = JSON.parse(Buffer.from(stateStr, 'base64').toString('utf-8'));
+      if (decoded && decoded.origin && isOriginAllowed(decoded.origin)) {
+        targetOrigin = decoded.origin;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  const frontendURL = targetOrigin || process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
 
   if (!code) {
     return res.redirect(`${frontendURL}/login?error=google_failed`);
@@ -252,7 +314,24 @@ const githubLogin = (req, res) => {
       return res.redirect(`/api/auth/github/callback?code=mock_sandbox_github_auth`);
     }
 
-    const url = `https://github.com/login/oauth/authorize?client_id=${clientID}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=user:email`;
+    // Try to get origin from Referer header
+    const referer = req.headers.referer || req.get('referrer');
+    let origin = '';
+    if (referer) {
+      try {
+        const refUrl = new URL(referer);
+        origin = refUrl.origin;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const statePayload = {
+      origin: isOriginAllowed(origin) ? origin : ''
+    };
+    const stateStr = Buffer.from(JSON.stringify(statePayload)).toString('base64');
+
+    const url = `https://github.com/login/oauth/authorize?client_id=${clientID}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=user:email&state=${stateStr}`;
     res.redirect(url);
   } catch (err) {
     console.error('githubLogin failed, redirecting to mock:', err.message);
@@ -262,10 +341,23 @@ const githubLogin = (req, res) => {
 
 const githubCallback = async (req, res, next) => {
   const code = req.query.code;
+  const stateStr = req.query.state;
   const clientID = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
   const redirectURI = getRedirectURI(req, '/api/auth/github/callback');
-  const frontendURL = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
+  
+  let targetOrigin = '';
+  if (stateStr) {
+    try {
+      const decoded = JSON.parse(Buffer.from(stateStr, 'base64').toString('utf-8'));
+      if (decoded && decoded.origin && isOriginAllowed(decoded.origin)) {
+        targetOrigin = decoded.origin;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  const frontendURL = targetOrigin || process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
 
   if (!code) {
     return res.redirect(`${frontendURL}/login?error=github_failed`);
