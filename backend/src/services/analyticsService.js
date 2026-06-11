@@ -150,14 +150,44 @@ const getEquityCurve = async (userId) => {
   const trades = await Trade.find({ userId }).sort({ createdAt: 1 }).lean();
   if (trades.length === 0) return [];
 
-  const STARTING_BALANCE = wallet.balance || 30000;
-  let cashBalance = STARTING_BALANCE;
-  const curve = [];
+  // Calculate the starting balance by working backward from current balance
+  let startingBalance = wallet.balance;
   for (const trade of trades) {
-    if (trade.type === 'buy') cashBalance -= trade.totalValue;
-    else cashBalance += trade.totalValue;
-    curve.push({ date: trade.createdAt.toISOString().split('T')[0], cashBalance: parseFloat(cashBalance.toFixed(2)), tradeSymbol: trade.symbol, tradeType: trade.type });
+    if (trade.type === 'buy') {
+      startingBalance += trade.totalValue; // Reverse buy: add back cash spent
+    } else {
+      startingBalance -= trade.totalValue; // Reverse sell: subtract cash gained
+    }
   }
+
+  const curve = [];
+
+  // Add starting point (1 day before the first trade was executed)
+  const firstTradeTime = new Date(trades[0].createdAt);
+  const startingTime = new Date(firstTradeTime.getTime() - 24 * 60 * 60 * 1000);
+  curve.push({
+    date: startingTime.toISOString().split('T')[0],
+    cashBalance: parseFloat(startingBalance.toFixed(2)),
+    tradeSymbol: 'START',
+    tradeType: 'deposit',
+  });
+
+  // Roll forward through trades to record cash balance trajectory
+  let cash = startingBalance;
+  for (const trade of trades) {
+    if (trade.type === 'buy') {
+      cash -= trade.totalValue;
+    } else {
+      cash += trade.totalValue;
+    }
+    curve.push({
+      date: trade.createdAt.toISOString().split('T')[0],
+      cashBalance: parseFloat(cash.toFixed(2)),
+      tradeSymbol: trade.symbol,
+      tradeType: trade.type,
+    });
+  }
+
   return curve;
 };
 
