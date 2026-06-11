@@ -1,13 +1,13 @@
-# 📈 StockSim — Real-time Simulated Equity Trading Platform
+# StockSim — Real-time Simulated Equity Trading Platform
 
 StockSim is a high-fidelity, full-stack simulated stock trading and analysis platform. It provides users with virtual paper trading capabilities, real-time market data updates, live level 2 order depth mockups, interactive charts, and email price-target monitoring. Designed as a state-of-the-art cyberpunk interface with flexible light/dark mode styling, the application operates fully in the cloud using a modern serverless/split-deployment model: **Frontend on Vercel**, **Backend on Render**, and **Database on MongoDB Atlas**.
 
-### 🌐 Live Platform Link
+###  Live Platform Link
 Deploy URL: [https://stock-trading-simulator-topaz.vercel.app/](https://stock-trading-simulator-topaz.vercel.app/)
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+##  Architecture & Tech Stack
 
 The system relies on a split-deployment model for optimal performance, stability, and zero-cost HTTPS secure connections:
 
@@ -26,7 +26,7 @@ graph TD
 
 ---
 
-## 📂 Root File Structure
+##  Root File Structure
 
 ```text
 ├── README.md                   # Core Platform documentation
@@ -43,7 +43,7 @@ graph TD
 
 ---
 
-## 🚀 Local Development Setup
+##  Local Development Setup
 
 To run the frontend and backend microservices locally:
 
@@ -75,7 +75,7 @@ To run the frontend and backend microservices locally:
 
 ---
 
-## 🔒 Security & Deployment Hardening Standards
+##  Security & Deployment Hardening Standards
 - **Dynamic CORS Checker**: Incorporates a dynamic CORS validation engine supporting standard domains, dynamic localhost development ports, and Vercel preview/production domains dynamically.
 - **Dynamic OAuth State Redirection**: Uses secure OAuth `state` parameters to dynamically parse and return users to the exact staging preview or production deployment domain they logged in from.
 - **Token Security**: Shifted authentication refresh tokens from vulnerable LocalStorage caches to secure, `HttpOnly`, `SameSite=Strict` cookies.
