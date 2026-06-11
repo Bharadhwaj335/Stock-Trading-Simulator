@@ -14,9 +14,15 @@ const transporter = nodemailer.createTransport({
 
 const sendEmail = async ({ to, subject, text, html }) => {
   try {
-    // If SMTP_USER or SMTP_PASS is missing, we log it and mock success so development doesn't fail.
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      logger.info(`[Email MOCK] Sending email to ${to}: "${subject}". (SMTP credentials missing from .env, skipping real send)`);
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const isMock = !smtpUser || !smtpPass || 
+                   smtpUser.includes('replace_with') || 
+                   smtpPass.includes('replace_with');
+
+    // If SMTP_USER or SMTP_PASS is missing or has placeholder values, mock success.
+    if (isMock) {
+      logger.info(`[Email MOCK] Sending email to ${to}: "${subject}". (SMTP credentials missing or placeholders, skipping real send)`);
       return { mock: true };
     }
 
