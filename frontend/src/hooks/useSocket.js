@@ -4,10 +4,23 @@ import { useAuthStore } from '../store/authStore';
 
 let socket = null;
 
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return import.meta.env.VITE_SOCKET_URL;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // If API URL ends with '/api', strip it to get the server base URL
+    return apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
+  }
+  return 'http://localhost:5000';
+};
+
 export const getSocket = () => {
   if (!socket) {
     const token = useAuthStore.getState().accessToken;
-    socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+    const socketUrl = getSocketUrl();
+    socket = io(socketUrl, {
       auth: { token },
       transports: ['websocket'],
     });
