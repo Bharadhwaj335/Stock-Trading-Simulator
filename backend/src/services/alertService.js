@@ -78,8 +78,8 @@ const checkAndFireAlerts = async () => {
             </div>
           `
         })
-        .then(() => console.log(`[Alert Service] SMTP trigger email successfully queued/sent to ${email}`))
-        .catch(err => logger.error('SMTP Trigger send failed:', err.message));
+        .then(() => console.log(`[Alert Service] Trigger email successfully queued/sent to ${email}`))
+        .catch(err => logger.error(`SMTP/API Trigger send failed: ${err.message}`));
       } else {
         console.log(`[Alert Service] Alert triggered, but notifyEmail=${alert.notifyEmail} and email=${email || 'none'}. Skipping email.`);
       }

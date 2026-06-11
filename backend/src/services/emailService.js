@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { logger } = require('../utils/logger');
 
 // Create transporter
@@ -26,6 +27,40 @@ const sendEmail = async ({ to, subject, text, html }) => {
       return { mock: true };
     }
 
+    const smtpHost = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
+
+    // If using Brevo, prefer their HTTP API to bypass Render Free Tier SMTP port blocks
+    if (smtpHost.toLowerCase() === 'smtp-relay.brevo.com') {
+      try {
+        logger.info(`[Email Service] Attempting to send email via Brevo HTTP API to ${to}...`);
+        const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
+          sender: {
+            name: "StockSim Alerts",
+            email: smtpUser,
+          },
+          to: [{ email: to }],
+          subject,
+          textContent: text,
+          htmlContent: html,
+        }, {
+          headers: {
+            'accept': 'application/json',
+            'api-key': smtpPass,
+            'content-type': 'application/json',
+          },
+          timeout: 10000, // 10 seconds timeout
+        });
+
+        const messageId = response.data?.messageId || 'api-success';
+        logger.info(`[Email Service] Email sent via Brevo HTTP API to ${to}: ${messageId}`);
+        return { messageId };
+      } catch (apiErr) {
+        const errorMsg = apiErr.response?.data?.message || apiErr.message;
+        logger.warn(`[Email Service] Brevo HTTP API failed (${errorMsg}), falling back to SMTP...`);
+      }
+    }
+
+    // Fallback to standard SMTP
     const info = await transporter.sendMail({
       from: `"StockSim Alerts" <${process.env.SMTP_USER}>`,
       to,
@@ -33,10 +68,10 @@ const sendEmail = async ({ to, subject, text, html }) => {
       text,
       html,
     });
-    logger.info(`[Email Service] Email sent to ${to}: ${info.messageId}`);
+    logger.info(`[Email Service] Email sent via SMTP to ${to}: ${info.messageId}`);
     return info;
   } catch (err) {
-    logger.error(`[Email Service] Failed to send email to ${to}:`, err.message);
+    logger.error(`[Email Service] Failed to send email to ${to}: ${err.message}`);
     throw err;
   }
 };
