@@ -13,13 +13,20 @@ const checkAndFireAlerts = async () => {
 
   const toTrigger = [];
 
+  console.log(`[Alert Service] Evaluating ${activeAlerts.length} active alerts...`);
+
   for (const alert of activeAlerts) {
     const price = priceMap[alert.symbol];
-    if (!price) continue;
+    if (!price) {
+      console.log(`[Alert Service] Price missing for symbol ${alert.symbol}, skipping.`);
+      continue;
+    }
 
     const triggered =
       (alert.condition === 'ABOVE' && price >= alert.targetPrice) ||
       (alert.condition === 'BELOW' && price <= alert.targetPrice);
+
+    console.log(`[Alert Service] Checking alert ${alert._id}: ${alert.symbol} current=$${price} target=$${alert.targetPrice} cond=${alert.condition} triggered=${triggered}`);
 
     if (triggered) {
       toTrigger.push(String(alert._id));
@@ -38,6 +45,7 @@ const checkAndFireAlerts = async () => {
 
       // Check if user requested email notification
       if (alert.notifyEmail && email) {
+        console.log(`[Alert Service] Alert triggered! Attempting to send email notification to ${email}...`);
         const { sendEmail } = require('./emailService');
         sendEmail({
           to: email,
@@ -69,7 +77,11 @@ const checkAndFireAlerts = async () => {
               <p>Sign in to your StockSim account to see more or manage your monitors.</p>
             </div>
           `
-        }).catch(err => logger.error('SMTP Trigger send failed:', err.message));
+        })
+        .then(() => console.log(`[Alert Service] SMTP trigger email successfully queued/sent to ${email}`))
+        .catch(err => logger.error('SMTP Trigger send failed:', err.message));
+      } else {
+        console.log(`[Alert Service] Alert triggered, but notifyEmail=${alert.notifyEmail} and email=${email || 'none'}. Skipping email.`);
       }
 
       logger.info(`Alert triggered: ${alert.symbol} ${alert.condition} ${alert.targetPrice}`);
