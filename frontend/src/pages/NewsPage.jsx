@@ -6,7 +6,9 @@ import { Newspaper, RefreshCw, Compass, Briefcase, ChevronRight, ExternalLink, C
 import { portfolioService } from '../services/api';
 import Skeleton from '../components/ui/Skeleton';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { getApiBaseUrl } from '../utils/config';
+
+const API_BASE = getApiBaseUrl();
 
 // Public axios instance — no auth header so news endpoints don't trigger 401
 const publicApi = axios.create({ baseURL: API_BASE, timeout: 12000 });

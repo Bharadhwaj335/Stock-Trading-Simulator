@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { getApiBaseUrl } from '../utils/config';
 
 const readPersistedAccessToken = () => {
   try {
@@ -14,7 +15,7 @@ const readPersistedAccessToken = () => {
 };
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
 });
 
@@ -62,7 +63,7 @@ api.interceptors.response.use(
       const { setAuth, user } = useAuthStore.getState();
       try {
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/refresh`,
+          `${getApiBaseUrl()}/auth/refresh`,
           {},
           { withCredentials: true }
         );

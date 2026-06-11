@@ -6,6 +6,7 @@ import { leaderboardService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import Skeleton from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
+import { getApiBaseUrl } from '../utils/config';
 
 const FRONTEND_BADGES = {
   first_trade: { label: 'First Trade', emoji: '🎯', description: 'Executed your very first trade!' },
@@ -38,7 +39,7 @@ export default function PublicProfilePage() {
     // Call the public lookup endpoint in userService
     const res = await userService.getMe().then(async (meRes) => {
       // Direct axios fallback to get username lookup cleanly
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/users/${username}`, {
+      const response = await fetch(`${getApiBaseUrl()}/users/${username}`, {
         headers: { 'Authorization': `Bearer ${useAuthStore.getState().accessToken}` }
       });
       if (!response.ok) throw new Error('Trader not found');

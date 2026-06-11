@@ -2,19 +2,9 @@ import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 
-let socket = null;
+import { getSocketUrl } from '../utils/config';
 
-const getSocketUrl = () => {
-  if (import.meta.env.VITE_SOCKET_URL) {
-    return import.meta.env.VITE_SOCKET_URL;
-  }
-  const apiUrl = import.meta.env.VITE_API_URL;
-  if (apiUrl) {
-    // If API URL ends with '/api', strip it to get the server base URL
-    return apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
-  }
-  return 'http://localhost:5000';
-};
+let socket = null;
 
 export const getSocket = () => {
   if (!socket) {
