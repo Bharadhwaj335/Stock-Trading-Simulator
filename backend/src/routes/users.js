@@ -156,8 +156,9 @@ router.delete('/watchlist/:symbol', async (req, res, next) => {
 
 router.get('/:username', async (req, res, next) => {
   try {
+    const escapedUsername = req.params.username.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const user = await User.findOne({ 
-      username: { $regex: new RegExp(`^${req.params.username}$`, 'i') }, 
+      username: { $regex: new RegExp(`^${escapedUsername}$`, 'i') }, 
       isPublic: { $ne: false } 
     })
       .select('-refreshToken')
